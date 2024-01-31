@@ -18,30 +18,17 @@ library(rasterVis)
 library(StatMatch)
 
 #1.general setup ----
+setwd("DATA")
+load("SAVE/final_st_list.Rdata")
+load("SAVE/bio_dat_larvae.Rdata")
+load("SAVE/presences_after_spatial_filtering.Rdata")
+rm(presences_list)
 
-load("~/final_st_lists.Rdata")
-load("~/bio_dat_co_sp&env_sampling.Rdata")
-load("~/presences_after_spatial_filtering.Rdata")
-load("~/bio_dat_co_spawning.Rdata")
-rm(presences_list, full_dat)
+all_vars <- str_remove_all(names(st_list_NEA_cl[[1]][[1]]) , "_\\d{4}_\\d{2}|_\\d{4}_\\d")
 
-all_vars <- str_remove_all(names(st_list_NEA2[[1]][[1]]) , "_\\d{4}_\\d{2}|_\\d{4}_\\d")
-v_list_all <- all_vars[-which(all_vars == "Chl")]
+species_sp <- tibble(scientific = c("Clupea harengus", "Scomber scombrus"),
+                  simple = c("herring", "mackerel"))
 
-#remove Phyto from stack list
-st_list_NEA_cl <- st_list_NEA2
-for (y in 1:length(2000:2020)) {
-  for (m in 1:12) {
-    st_list_NEA_cl[[y]][[m]] <- st_list_NEA2[[y]][[m]][[which(str_detect(names(st_list_NEA2[[y]][[m]]), paste(v_list_all, collapse = "|")))]]
-  }
-}
-
-species_sp <- tibble(scientific = c("Clupea harengus"),
-                  simple = c("herring"))
-
-
-# , "Scomber scombrus"
-# , "mackerel"
 
 month_lvl <- tibble(mon_char = c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"),
                     Month = c(1:12))
@@ -63,21 +50,16 @@ features_fun <- function(string) {
   return(out)
 }
 
-# reduced_dat <- reduced_dat %>%
-#   mutate(Month = as.factor(Month)) %>%
-#   mutate(seabed_energy = as.factor(seabed_energy)) %>%
-#   mutate(seabed_substrate = as.factor(seabed_substrate))
-
 
 #2. specific setup ----
-runX <- 4
+runX <- 1
 txt <- "number of pres lots of variations"
 varying <- "npres"
-n_pres_pts <- rep(c(100,150,200,250,300,350,400), each = 3)
+n_pres_pts <- rep(seq(from = 50, to = 100, by = 50),1)  #numeric vector of length 4
 
 v_list <- list()
 v_list$herring <- c("SST", "SSS", "windfarms", "Phyto", "ZooPl", "seabed_energy", "seabed_substrate", "depth")
-v_list$mackerel <- c("SST", "SSS", "windfarms", "max_SSV", "EuphD", "ZooPl", "depth")
+v_list$mackerel <- c("SST", "SSS", "windfarms", "max_SSV", "ZooPl", "depth")
 
 # v_list2 <- list()
 # v_list2$herring <- c("Year","Month","SST", "SSS", "windfarms", "Phyto", "ZooPl", "seabed_energy", "seabed_substrate", "depth")
@@ -86,9 +68,8 @@ v_list$mackerel <- c("SST", "SSS", "windfarms", "max_SSV", "EuphD", "ZooPl", "de
 
 fig_out_name <- paste0("_response_curve_", varying, "_")
 
-
-setwd(paste0("~/Model_settings_tests/spawning/run_", runX))
-write.table(txt, "config.txt")
+dir.create(paste0("SAVE/test_runs_larvae/run_", runX), showWarnings = TRUE)
+write.table(txt, paste0("SAVE/test_runs_larvae/run_", runX, "/config.txt"))
 
 df_out <- data.frame(species = rep(species_sp$simple, length(n_pres_pts)),
                      n_pres_pts = rep(n_pres_pts, each = nrow(species_sp)))
@@ -96,8 +77,7 @@ df_out <- data.frame(species = rep(species_sp$simple, length(n_pres_pts)),
                      # n_pres_pts = rep(n_pres_pts, each = nrow(species)),
                      # vars = rep(c("vlist1","vlist2"), each = nrow(species)))
 
-df_out$SACpbg_pval <- df_out$SACpbg <- df_out$SACp_pval <- df_out$SACp <- 
-  df_out$AUC <- df_out$rm <- df_out$fc <- df_out$n_bg_pts <- NA
+df_out$SACp_pval <- df_out$SACp <- df_out$AUC <- df_out$rm <- df_out$fc <- df_out$n_bg_pts <- NA
 
 for (n in 1:length(n_pres_pts)){
   # v_list <- v_list_specific[[n]]
@@ -117,7 +97,7 @@ for (n in 1:length(n_pres_pts)){
 
     #remove variables that have only one unique value
     tmp_df <- tmp_full_dat %>%
-      select(any_of(v_list_all)) %>%
+      select(any_of(all_vars)) %>%
       select(where(~ length(unique(.)) != 1))
 
     mal_dis <- mahalanobis.dist(tmp_df)
@@ -299,14 +279,6 @@ for (n in 1:length(n_pres_pts)){
       print(paste0("removed ", names(tmp_ind), " as a variable for ", species_sp$simple[s]))
     }
     
-    if("Gear" %in% v_list[[s]]) {
-      cat <- append(cat, c("Gear","Ship"))
-      tmp_pr_predv[[s]] <- tmp_pr_predv[[s]]  %>%
-        relocate(SST, SSS)                                #function cant handle when you start your variables with a categorical
-      tmp_bg_predv[[s]] <- tmp_bg_predv[[s]] %>%
-        relocate(SST, SSS)
-    }
-    
     tmp_pr_predv[[s]] <- data.frame(pr_coord[[s]] %>% select(lon, lat),tmp_pr_predv[[s]])
     tmp_bg_predv[[s]] <- data.frame(bg_coord[[s]] %>% select(lon, lat),tmp_bg_predv[[s]])
     
@@ -390,34 +362,22 @@ for (n in 1:length(n_pres_pts)){
         select(-Month)
     }
     
-    # pred_vals_pbg <- predict(mod.seq, df_pred_pbg, se.fit=TRUE, type = "cloglog")
     pred_vals_p <- predict(mod.seq, df_pred_p, se.fit=TRUE, type = "cloglog")
-    
-    # res_pbg <- c(pr_pa[[s]],bg_pa[[s]]) - pred_vals_pbg
     res_p <- c(pr_pa[[s]]) - pred_vals_p
-    
-    # dists_pbg <- as.matrix(dist(rbind(cbind(pr_coord[[s]][,1], pr_coord[[s]][,2]),
-    #                                   cbind(bg_coord[[s]][,1], bg_coord[[s]][,2]))))
-    # dists.inv_pbg <- 1/dists_pbg
-    # diag(dists.inv_pbg) <- 0
-    # dists.inv_pbg[is.infinite(dists.inv_pbg)] <- 0 #remove infinite values
     
     dists_p <- as.matrix(dist(cbind(pr_coord[[s]][,1], pr_coord[[s]][,2])))
     dists.inv_p <- 1/dists_p
     diag(dists.inv_p) <- 0
     dists.inv_p[is.infinite(dists.inv_p)] <- 0 #remove infinite values
     
-    #Global Moran's I from ape package (use prob)
-    # morans_I_list_pbg[[s]] <- Moran.I(c(res_pbg), dists.inv_pbg, scaled = TRUE, alternative = "greater")
+    # Global Moran's I from ape package
     morans_I_list_p[[s]] <- Moran.I(c(res_p), dists.inv_p, scaled = TRUE, alternative = "greater")
   }
   
   #output
   df_out$SACp[c((n*nrow(species_sp)-(nrow(species_sp)-1)):(n*nrow(species_sp)))] <- round(bind_rows(morans_I_list_p)$observed,3)
   df_out$SACp_pval[c((n*nrow(species_sp)-(nrow(species_sp)-1)):(n*nrow(species_sp)))] <- round(bind_rows(morans_I_list_p)$p.value,5)
-  # df_out$SACpbg[c((n*nrow(species_sp)-(nrow(species_sp)-1)):(n*nrow(species_sp)))] <- round(bind_rows(morans_I_list_pbg)$observed,3)
-  # df_out$SACpbg_pval[c((n*nrow(species_sp)-(nrow(species_sp)-1)):(n*nrow(species_sp)))] <- round(bind_rows(morans_I_list_pbg)$p.value,5)
-  
+
   print("4.SAC calculated")
   
   #2.5. response curves ----
@@ -428,11 +388,9 @@ for (n in 1:length(n_pres_pts)){
     mod <- eval_res@models[[which(names(eval_res@models) == opt.aicc$tune.args[1])]]
     
     plot.new()
-    #response curves
     
-    # png(paste0(species_sp$simple[s], "_response_curve_", n_pres_pts[n],".png"), width = 13,   #for variations on number of presences
-    #     height = 8, res = 100, units = 'in')
-    png(paste0(species_sp$simple[s], fig_out_name, n,".png"), width = 13,    #for variations on input variables
+    #response curves
+    png(paste0("SAVE/test_runs_larvae/run_", runX, "/", species_sp$simple[s], fig_out_name, n,".png"), width = 13,
         height = 8, res = 100, units = 'in')
     plot(mod, clamp = T, type = "cloglog")
     mtext(str_to_title(species_sp$simple[s]), side = 3, line = - 2, outer = TRUE)
@@ -442,4 +400,4 @@ for (n in 1:length(n_pres_pts)){
 }
 
 print(df_out)
-write.csv(df_out, "run_results.csv")
+write.csv(df_out, paste0("SAVE/test_runs_larvae/run_", runX, "/run_results.csv"))
