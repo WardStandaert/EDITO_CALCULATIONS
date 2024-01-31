@@ -5,12 +5,12 @@ library(terra)
 library(gdalUtils)
 library(rgdal)
 
-# resample files to resolution of 10 NM x 10 NM (resolution of biological data) ----
+# resample files to resolution of biological data (10 NM x 10 NM) ----
 ## netcdf files ----
 
-setwd("DATA/1.DOWNLOAD/environmental_variables/")
+setwd("DATA")
 
-nc_chl <- ncdf4::nc_open("chlorophyll_concentration.nc")
+nc_chl <- ncdf4::nc_open("1.DOWNLOAD/environmental_variables/chlorophyll_concentration.nc")
 v <- nc_chl$var[[1]]
 size <- v$varsize
 dims <- v$ndims
@@ -83,7 +83,7 @@ desired_nc_vars <- c("thetao", "so", "max_v", "o2", "chl", "phyc", "zooc", "zeu"
 key_nc_vars <- c("SST", "SSS", "max_SSV", "DO", "Chl", "Phyto", "ZooPl", "EuphD")
 
 #resample netcdf files
-fls <- list.files(pattern = ".nc$")
+fls <- list.files("1.DOWNLOAD/environmental_variables/", pattern = ".nc$", full.names = "TRUE")
 for (f in fls) {
   nc <- ncdf4::nc_open(f)
   nc_v <- which(names(nc$var) %in% desired_nc_vars)
@@ -122,58 +122,50 @@ for (f in fls) {
     st_res <- resample(st, r_res)
     names(st_res) <- paste(t_index$year, t_index$month, sep = "_")
     
-    setwd("DATA/1.DOWNLOAD/environmental_variables/")
-    raster::writeRaster(st_res, paste(v_name_out, ".grd", sep = ""), format = "raster", overwrite = TRUE)
-    setwd("DATA/2.PREPROCESSED/environmental_variables/")
-    
+    raster::writeRaster(st_res, paste("2.PREPROCESSED/environmental_variables/",v_name_out, ".grd", sep = ""), format = "raster", overwrite = TRUE)
+
     print(paste("processed", v_name))
   }
 }
 
 ## tif files (numerical - bilinear) ----
-fls <- list.files(pattern = ".tif$")
+fls <- list.files("1.DOWNLOAD/environmental_variables/", pattern = ".tif$", full.names = "TRUE")
 for (f in fls[c(1,2)]) {
   r_f <- raster(f)
-  r_name <- str_remove(f, ".tif$")
+  r_name <- f %>% str_remove(".tif$") %>% str_remove("1.DOWNLOAD/environmental_variables/")
   
   r_res <- resample(r_f, r_res)
   
-  setwd("C:/Users/ward.standaert/OneDrive - VLIZ/BAR ecological modelling/Scripts data-driven approach/Herring/Input-output_files/1.Resampled files")
-  raster::writeRaster(r_res, paste(r_name, ".grd", sep = ""), format = "raster", overwrite = TRUE)
-  setwd("C:/Users/ward.standaert/OneDrive - VLIZ/BAR ecological modelling/Scripts data-driven approach/Herring/Input-output_files/0.Preprocessed files")
-  
+  raster::writeRaster(r_res, paste("2.PREPROCESSED/environmental_variables/",r_name, ".grd", sep = ""), format = "raster", overwrite = TRUE)
+
   print(paste("processed", r_name))
 }
 
 ## tif files (categorical - nearest neighbour) ----
-fls <- list.files(pattern = ".tif$")
+fls <- list.files("1.DOWNLOAD/environmental_variables/", pattern = ".tif$", full.names = "TRUE")
 for (f in fls[c(3,4)]) {
   r_f <- raster(f)
-  r_name <- str_remove(f, ".tif$")
+  r_name <- f %>% str_remove(".tif$") %>% str_remove("1.DOWNLOAD/environmental_variables/")
   
   r_res <- resample(r_f, r_res, method = "ngb")
   
-  setwd("C:/Users/ward.standaert/OneDrive - VLIZ/BAR ecological modelling/Scripts data-driven approach/Herring/Input-output_files/1.Resampled files")
-  raster::writeRaster(r_res, paste(r_name, ".grd", sep = ""), format = "raster", overwrite = TRUE)
-  setwd("C:/Users/ward.standaert/OneDrive - VLIZ/BAR ecological modelling/Scripts data-driven approach/Herring/Input-output_files/0.Preprocessed files")
-  
+  raster::writeRaster(r_res, paste("2.PREPROCESSED/environmental_variables/", r_name, ".grd", sep = ""), format = "raster", overwrite = TRUE)
+
   print(paste("processed", r_name))
 }
 
 unique(values(r_res))
 
 #resample grd - windfarms
-fls <- list.files(pattern = ".grd$")
+fls <- list.files("1.DOWNLOAD/environmental_variables/", pattern = ".grd$", full.names = "TRUE")
 for (f in fls) {
   st_f <- stack(f)
-  st_name <- str_remove(f, ".grd$")
+  st_name <- f %>% str_remove(".grd$") %>% str_remove("1.DOWNLOAD/environmental_variables/")
   
   st_res <- resample(st_f, r_res, method = "ngb")
   
-  setwd("C:/Users/ward.standaert/OneDrive - VLIZ/BAR ecological modelling/Scripts data-driven approach/Herring/Input-output_files/1.Resampled files")
-  raster::writeRaster(st_res, paste(st_name, ".grd", sep = ""), format = "raster", overwrite = TRUE)
-  setwd("C:/Users/ward.standaert/OneDrive - VLIZ/BAR ecological modelling/Scripts data-driven approach/Herring/Input-output_files/0.Preprocessed files")
-  
+  raster::writeRaster(st_res, paste("2.PREPROCESSED/environmental_variables/", st_name, ".grd", sep = ""), format = "raster", overwrite = TRUE)
+
   print(paste("processed", st_name))
 }
 plot(st_res$X2020_12)
