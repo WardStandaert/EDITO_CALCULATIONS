@@ -48,6 +48,30 @@ mapview(dati_ad %>% filter(scientificname == "Clupea harengus") %>%
         dati_ad %>% filter(scientificname == "Clupea harengus") %>%
           select(lat) %>% pull(), 
         crs = "epsg:4326")
+
+
+dati_ad <- dati_ad %>%
+  filter(!(lon < -12 | lon > 10 | lat < 48 | lat > 62))
+
+her_ad_sp <- dati_ad %>% filter(scientificname == "Clupea harengus") %>% select(lon,lat) %>% as.data.frame()
+coordinates(her_ad_sp) <- ~lon+lat
+crs(her_ad_sp) <- crs("+init=epsg:4326")
+r_proj <- spTransform(her_ad_sp, CRS("+init=epsg:3034"))
+
+d <- gDistance(r_proj, byid=T)
+diag(d) <- rep(NA)
+min_dist <- apply(d, 1, min, na.rm = TRUE)
+indices <- min_dist %>% 
+  sort(decreasing = TRUE) %>%
+  head(n = 10)
+
+mapview(dati_ad %>% filter(scientificname == "Clupea harengus") %>% select(lon) %>% pull(), 
+        dati_ad %>% filter(scientificname == "Clupea harengus") %>% select(lat) %>% pull(), 
+        crs = 'epsg:4326', col.regions = "green", layer.name = "background", cex = 3) +
+  mapview(dati_ad %>% filter(scientificname == "Clupea harengus") %>% slice(as.numeric(names(indices))) %>% select(lon) %>% pull(),
+          dati_ad %>% filter(scientificname == "Clupea harengus") %>% slice(as.numeric(names(indices))) %>% select(lat) %>% pull(), 
+          crs = 'epsg:4326', col.regions = "red", layer.name = "occurrences", cex = 3)
+
 #remove points in southwest (lat < 48) & (lat < 50 & lon < -10)
 mapview(dati_ad %>% filter(scientificname == "Scomber scombrus") %>%
           select(lon) %>% pull(), 
