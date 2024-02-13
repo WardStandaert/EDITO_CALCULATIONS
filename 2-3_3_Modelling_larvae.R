@@ -73,6 +73,7 @@ for (s in 1:nrow(species_sp)) {
   names(pr_pa)[s] <- names(pr_coord)[s] <- names(pr_predv)[s] <- species_sp$simple[s]
 }
 
+# check the outcome
 lapply(pr_pa, head, n=2)              #presence points presence/absence values per species
 lapply(pr_coord, head, n=2)           #presence points coordinates per species
 lapply(pr_predv, head, n=2)           #presence points environmental variable extracts per species
@@ -134,6 +135,7 @@ for (s in 1:nrow(species_sp)) {
   names(bg_pa)[s] <- names(bg_coord)[s] <- names(bg_predv)[s] <- species_sp$simple[s]
 }
 
+# check the outcome
 lapply(bg_pa, head, n=2)              #bg points presence/absence values per species
 lapply(bg_coord, head, n=2)           #bg points coordinates per species
 lapply(bg_predv, head, n=2)           #bg points covariate extracts per species
@@ -220,6 +222,7 @@ for (s in 1:nrow(species_sp)) {
   tmp_pr_predv[[s]] <- data.frame(pr_coord[[s]] %>% dplyr::select(lon, lat), tmp_pr_predv[[s]]) #input for ENMevaluate requires lon & lat as first covariates
   tmp_bg_predv[[s]] <- data.frame(bg_coord[[s]] %>% dplyr::select(lon, lat), tmp_bg_predv[[s]]) #input for ENMevaluate requires lon & lat as first covariates
 
+  #test different model settings using ENMeval
   eval_res_list_sp[[s]] <- ENMeval::ENMevaluate(occs = tmp_pr_predv[[s]],
                                              bg = tmp_bg_predv[[s]],
                                              tune.args = list(fc = c("L","LQ","LQH"),
@@ -243,6 +246,7 @@ for(s in 1:nrow(species_sp)) print(eval_res_list_sp[[s]] %>%  eval.results() %>%
 
 
 #4 model evaluation AUC & TSS ----
+set.seed(123)
 
 AUC_maxent <- list()
 TSS_maxent <- list()
@@ -381,7 +385,7 @@ colnames(sum_all) <- c("species",
 sum_all[match(sum_all$species, species_sp$simple),]
 
 #save results
-write.csv(sum_all, "3.MODEL_OUTPUT/ADULTS/validation_metrics.csv")
+write.csv(sum_all, "3.MODEL_OUTPUT/LARVAE/validation_metrics.csv")
 
 
 #5. Spatial autocorrelation ----
@@ -442,7 +446,8 @@ morans_I_list[[2]]
 
 #6. variable importance ----
 
-#make big tibble with all possible values per variable
+# make big tibble with all possible values per variable
+# only run once for either adults or larvae
 
 # tib_all_v <- tibble(a = rep(1,3846528)) %>% select()
 # for (v in 1:length(v_list_all)) {
@@ -565,10 +570,10 @@ for (s in 1:nrow(species_sp)) {
 }
 
 cor_maxnet_sp <- cor_maxnet
-save(cor_maxnet_sp, file = "SAVE/NEA_variable_importance.Rdata")
+# save(cor_maxnet_sp, file = "SAVE/NEA_variable_importance_larvae.Rdata")
 
 # SAVE ----
-load("SAVE/NEA_variable_importance.Rdata")
+load("SAVE/NEA_variable_importance_larvae.Rdata")
 
 #convert to percentages
 var_imp_lv <- cor_maxnet_sp[[1]]
@@ -576,6 +581,7 @@ var_imp_lv <- round(var_imp_lv/sum(var_imp_lv),2)
 var_imp_lv
 sum(var_imp_lv)
 
+write.csv(var_imp_lv, "3.MODEL_OUTPUT/LARVAE/variable_importance.csv")
 
 #7. Spatial predictions ----
 for (m in 1:12) {

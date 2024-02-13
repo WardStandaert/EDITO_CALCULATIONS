@@ -74,6 +74,7 @@ for (s in 1:nrow(species)) {
   names(pr_pa)[s] <- names(pr_coord)[s] <- names(pr_predv)[s] <- species$simple[s]
 }
 
+# check the outcome
 lapply(pr_pa, head, n=2)              #presence points presence/absence values per species
 lapply(pr_coord, head, n=2)           #presence points coordinates per species
 lapply(pr_predv, head, n=2)           #presence points environmental variable extracts per species
@@ -135,6 +136,7 @@ for (s in 1:nrow(species)) {
    names(bg_pa)[s] <- names(bg_coord)[s] <- names(bg_predv)[s] <- species$simple[s]
 }
 
+# check the outcome
 lapply(bg_pa, head, n=2)              #bg points presence/absence values per species
 lapply(bg_coord, head, n=2)           #bg points coordinates per species
 lapply(bg_predv, head, n=2)           #bg points covariate extracts per species
@@ -229,6 +231,7 @@ for (s in 1:nrow(species)) {
   tmp_pr_predv[[s]] <- data.frame(pr_coord[[s]] %>% dplyr::select(lon, lat), tmp_pr_predv[[s]]) #input for ENMevaluate requires lon & lat as first covariates
   tmp_bg_predv[[s]] <- data.frame(bg_coord[[s]] %>% dplyr::select(lon, lat), tmp_bg_predv[[s]]) #input for ENMevaluate requires lon & lat as first covariates
   
+  #test different model settings using ENMeval
   eval_res_list[[s]] <- ENMeval::ENMevaluate(occs = tmp_pr_predv[[s]],
                                     bg = tmp_bg_predv[[s]],
                                     tune.args = list(fc = c("L","LQ","LQH"),
@@ -252,6 +255,7 @@ for(s in 1:nrow(species)) print(eval_res_list[[s]] %>%  eval.results() %>% filte
 
 
 #4 model evaluation AUC & TSS ----
+set.seed(123)
 
 AUC_maxent <- list()
 TSS_maxent <- list()
@@ -550,10 +554,10 @@ for (s in 1:nrow(species)) {
   toc()
 }
 
-save(cor_maxnet, file = "SAVE/NEA_variable_importance.Rdata")
+save(cor_maxnet, file = "SAVE/NEA_variable_importance_adults.Rdata")
 
 # SAVE ----
-load("SAVE/NEA_variable_importance.Rdata")
+load("SAVE/NEA_variable_importance_adults.Rdata")
 
 sort(cor_maxnet[[1]], decreasing = TRUE)
 sort(cor_maxnet[[2]], decreasing = TRUE)
@@ -566,6 +570,7 @@ var_imp_ad <- round(var_imp_ad/sum(var_imp_ad),2)
 var_imp_ad
 sum(var_imp_ad)
 
+write.csv(var_imp_ad, "3.MODEL_OUTPUT/ADULTS/variable_importance.csv")
 
 #7. Spatial predictions ----
 for (m in 1:12) {
