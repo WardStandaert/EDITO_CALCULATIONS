@@ -3,22 +3,26 @@ library(ggplot2)
 library(gridExtra)
 library(grid)
 
-setwd("~/OUTPUT/3.sp&env_filtered_model/spawning/final_model_400")
-load("SAVE/NEA_ENMeval_outcomes.Rdata")
-load("SAVE/NEA_variable_importance.Rdata")
-load("SAVE/NEA_presence_background.Rdata")
-
-pr_predv_lv <- pr_predv
-
-setwd("~/OUTPUT/3.sp&env_filtered_model/adult/final_model_400")
-load("SAVE/NEA_ENMeval_outcomes.Rdata")
-load("SAVE/NEA_variable_importance.Rdata")
-load("SAVE/NEA_presence_background.Rdata")
+setwd("DATA")
+load("SAVE/NEA_ENMeval_outcomes_adults.Rdata")
+load("SAVE/NEA_variable_importance_adults.Rdata")
+load("SAVE/NEA_presence_background_adults.Rdata")
 
 pr_predv_ad <- pr_predv
+cor_maxnet_ad <- cor_maxnet
+eval_res_list_ad <- eval_res_list
+rm(bg_coord, bg_pa, bg_predv, pr_coord, pr_pa, pr_predv, cor_maxnet, eval_res_list)
+
+load("SAVE/NEA_ENMeval_outcomes_larvae.Rdata")
+load("SAVE/NEA_variable_importance_larvae.Rdata")
+load("SAVE/NEA_presence_background_larvae.Rdata")
+
+pr_predv_lv <- pr_predv
+rm(bg_coord, bg_pa, bg_predv, pr_coord, pr_pa, pr_predv)
+
 
 #1. process variable importance ----
-var_imp_ad <- cor_maxnet[[1]]
+var_imp_ad <- cor_maxnet_ad[[1]]
 var_imp_lv <- cor_maxnet_sp[[1]]
 
 #convert to percentages
@@ -32,15 +36,16 @@ var_imp_ad <- rev(sort(var_imp_ad))
 var_imp_lv <- rev(sort(var_imp_lv))
 
 
-#include only > 5%
+#2. process model outcomes ----
+
+#include only > 5% for plots
 var_imp_ad <- var_imp_ad[which(var_imp_ad > 0.05)]
 var_imp_lv <- var_imp_lv[which(var_imp_lv > 0.05)]
 
-
 nms <- union(names(var_imp_ad), names(var_imp_lv))
 
-#2. process model outcomes ----
-eval_res_ad <- eval_res_list[[1]]
+# create models
+eval_res_ad <- eval_res_list_ad[[1]]
 res_ad <- eval.results(eval_res_ad)
 opt.aicc_ad <- res_ad %>% filter(delta.AICc == 0)
 mod_ad <- eval.models(eval_res_ad)[[opt.aicc_ad$tune.args]]
@@ -60,8 +65,6 @@ name_key <- data.frame(old = c("depth", "sub_char", "SST", "Phyto", "ZooPl", "SS
 substr_key <- c("Fine mud", "Sandy mud", "Muddy sand", "Sandy mud or Muddy sand ",
                 "Sand", "Coarse substrate", "Rock or other hard substrata", 
                 "Seabed", "Mixed sediment", "Sediment")
-
-setwd("~/OUTPUT/response_curves")
 
 for (n in nms) {
   out_name <- name_key$new[which(name_key$old == n)]
@@ -87,11 +90,12 @@ for (n in nms) {
                    axis.title.x = element_text(size=10, face = "bold", colour = "black"),
                    axis.title.y = element_text(size=10, face = "bold", colour = "black"),
                    legend.text = element_text(size=10, face = "bold", colour = "black")))
-    # ggsave(paste0("var_imp_", n,".png"))
     next
   }
   
-  #others are visualized as line plots
+  #the effect of other variables is visualized as a line plot
+  
+  #calculate x-axis limits
   min_lv <- pr_predv_lv[[1]] %>% dplyr::select(all_of(n)) %>% min
   max_lv <- pr_predv_lv[[1]] %>% dplyr::select(all_of(n)) %>% max
     
@@ -103,6 +107,7 @@ for (n in nms) {
     min <- min(min_ad, min_lv)
     max <- max(max_ad, max_lv)
     
+    # generate plot data
     dat_ad <- response.plot(mod_ad, n, type = "cloglog", 
                             ylab = "Probability of occurrence",
                             min = min_ad, max = max_ad, plot = F)
@@ -111,6 +116,8 @@ for (n in nms) {
                             min = min_lv, max = max_lv, plot = F)
     dat <- rbind(dat_ad %>% mutate(ls = rep("adult")), 
                  dat_lv %>% mutate(ls = rep("larva")))
+    
+    # plot using ggplot2
     assign(n, ggplot(dat) +
       geom_line(aes_string(x = n, y = "pred", colour = "ls"), linewidth = 1) + 
       labs(x = addline_format(out_name), y = "Probability of presence") +
@@ -127,7 +134,7 @@ for (n in nms) {
   
   }
   
-  #less response curves to show for adult fish
+  #since larvae have more variables that have var importance > 5 %, some plots need to be generated only for larvae
   else if(!(n %in% names(var_imp_ad))) {
     dat_lv <- response.plot(mod_lv, n, type = "cloglog", 
                             ylab = "Probability of occurrence",
@@ -144,11 +151,12 @@ for (n in nms) {
                    axis.text.x = element_text(size=10, face = "plain", colour = "black"),
                    axis.title.x = element_text(size=10, face = "bold", colour = "black"),
                    axis.title.y = element_text(size=10, face = "bold", colour = "black")))
-    
-    # ggsave(paste0("var_imp_", n,".png"))
-  }
+    }
 }
 
+# compile all single plots in one figure
+
+# generate common legend:
 g_legend<-function(a.gplot){
   tmp <- ggplot_gtable(ggplot_build(a.gplot))
   leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
@@ -156,6 +164,7 @@ g_legend<-function(a.gplot){
   return(legend)}
 
 mylegend<-g_legend(depth + theme(legend.background = element_rect(linetype = 1, linewidth = 0.1, colour = 1)))
+
 
 a <- grid.arrange(depth + theme(legend.position = "none"), 
                   SST + labs(y = "") + theme(axis.text.y=element_blank(), legend.position = "none"), 
@@ -169,8 +178,8 @@ a <- grid.arrange(depth + theme(legend.position = "none"),
                                         c(4,4,5,5,7,7),
                                         c(6,6,6,6,7,7)))
 
-
-ggsave("var_response_curves.png", a, width = 10.4, height = 8.66)
+# save plot
+ggsave("3.MODEL_OUTPUT/response_curves.png", a, width = 10.4, height = 8.66)
 
 
 
