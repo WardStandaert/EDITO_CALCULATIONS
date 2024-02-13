@@ -35,9 +35,6 @@ v_list <- list()
 v_list$herring <- c("SST", "SSS", "windfarms", "ZooPl", "Phyto", "seabed_energy", "seabed_substrate", "depth")
 v_list$mackerel <- c("SST", "SSS", "windfarms", "max_SSV", "ZooPl", "Phyto", "depth")
 
-
-month_lvl <- data.frame(mon_char = c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"),
-                        Month = c(1:12))
 substr_lvl <- data.frame(sub_char = c("Fine mud", "Sand", "Muddy sand", "Mixed sediment",
                                       "Coarse substrate","Sandy mud or Muddy sand", "Seabed",
                                       "Rock or other hard substrata","Sandy mud", "Sandy mud or Muddy sand ",
@@ -166,21 +163,7 @@ eval_res_list_sp <- list()
 tmp_pr_predv <- list()
 tmp_bg_predv <- list()
 for (s in 1:nrow(species_sp)) {
-  if(all(c("seabed_energy","seabed_substrate","Month") %in% names(pr_predv[[s]]))) {
-    tmp_pr_predv[[s]] <- pr_predv[[s]] %>%
-      left_join(month_lvl, by = "Month") %>%
-      left_join(energy_lvl, by = "seabed_energy") %>%
-      left_join(substr_lvl, by = "seabed_substrate") %>%
-      dplyr::select(-Month, -seabed_energy, -seabed_substrate)
-    
-    tmp_bg_predv[[s]] <- bg_predv[[s]] %>%
-      left_join(month_lvl, by = "Month") %>%
-      left_join(energy_lvl, by = "seabed_energy") %>%
-      left_join(substr_lvl, by = "seabed_substrate") %>%
-      dplyr::select(-Month, -seabed_energy, -seabed_substrate)
-    cat <- c("mon_char", "ene_char","sub_char")
-  }
-  else if(all(c("seabed_energy","seabed_substrate") %in% names(pr_predv[[s]]))) {
+  if(all(c("seabed_energy","seabed_substrate") %in% names(pr_predv[[s]]))) {
     tmp_pr_predv[[s]] <- pr_predv[[s]] %>%
       left_join(energy_lvl, by = "seabed_energy") %>%
       left_join(substr_lvl, by = "seabed_substrate") %>%
@@ -192,21 +175,10 @@ for (s in 1:nrow(species_sp)) {
       dplyr::select(-seabed_energy, -seabed_substrate)
     cat <- c("ene_char","sub_char")
   }
-  else if("Month" %in% names(pr_predv[[s]])) {
-    tmp_pr_predv[[s]] <- pr_predv[[s]] %>%
-      left_join(month_lvl, by = "Month") %>%
-      dplyr::select(-Month)
-    
-    tmp_bg_predv[[s]] <- bg_predv[[s]] %>%
-      left_join(month_lvl, by = "Month") %>%
-      dplyr::select(-Month)
-    cat <- "mon_char"
-  }
   else {
     tmp_pr_predv[[s]] <- pr_predv[[s]]
     tmp_bg_predv[[s]] <- bg_predv[[s]]
     cat <- NULL
-    
   }
   
   #if any column exists with only one unique value --> delete it
@@ -256,20 +228,7 @@ for (s in 1:nrow(species_sp)) {
   Presences <- pr_predv[[s]]
   Background <- bg_predv[[s]]
   
-  if(all(c("seabed_energy","seabed_substrate","Month") %in% names(pr_predv[[s]]))) {
-    Presences <- pr_predv[[s]] %>%
-      left_join(month_lvl, by = "Month") %>%
-      left_join(energy_lvl, by = "seabed_energy") %>%
-      left_join(substr_lvl, by = "seabed_substrate") %>%
-      dplyr::select(-Month, -seabed_energy, -seabed_substrate)
-    
-    Background <- bg_predv[[s]] %>%
-      left_join(month_lvl, by = "Month") %>%
-      left_join(energy_lvl, by = "seabed_energy") %>%
-      left_join(substr_lvl, by = "seabed_substrate") %>%
-      dplyr::select(-Month, -seabed_energy, -seabed_substrate)
-  }
-  else if(all(c("seabed_energy","seabed_substrate") %in% names(pr_predv[[s]]))) {
+  if(all(c("seabed_energy","seabed_substrate") %in% names(pr_predv[[s]]))) {
     Presences <- pr_predv[[s]] %>%
       left_join(energy_lvl, by = "seabed_energy") %>%
       left_join(substr_lvl, by = "seabed_substrate") %>%
@@ -279,15 +238,6 @@ for (s in 1:nrow(species_sp)) {
       left_join(energy_lvl, by = "seabed_energy") %>%
       left_join(substr_lvl, by = "seabed_substrate") %>%
       dplyr::select(-seabed_energy, -seabed_substrate)
-  }
-  else if("Month" %in% names(pr_predv[[s]])) {
-    Presences <- pr_predv[[s]] %>%
-      left_join(month_lvl, by = "Month") %>%
-      dplyr::select(-Month)
-    
-    Background <- bg_predv[[s]] %>%
-      left_join(month_lvl, by = "Month") %>%
-      dplyr::select(-Month)
   }
   else {
     Presences <- pr_predv[[s]]
@@ -399,22 +349,12 @@ for (s in 1:nrow(species_sp)) {
   
   #2. make original prediction
   df_pred <- pr_predv[[s]]
-  if(all(c("seabed_energy", "seabed_substrate", "Month") %in% names(df_pred))) {
-    df_pred <- df_pred %>%
-      left_join(substr_lvl, by = "seabed_substrate") %>%
-      left_join(energy_lvl, by = "seabed_energy") %>%
-      left_join(month_lvl, by = "Month") %>%
-      dplyr::select(-seabed_substrate, -seabed_energy, -Month)
-  }
   if(all(c("seabed_energy", "seabed_substrate") %in% names(df_pred))) {
     df_pred <- df_pred %>%
       mutate(sub_char = as.numeric(seabed_substrate)) %>%
       mutate(ene_char = as.numeric(seabed_energy)) %>%
       dplyr::select(-seabed_substrate, -seabed_energy)
   }
-  if (c("Month") %in% names(df_pred)) df_pred <- df_pred %>%
-    left_join(month_lvl, by = "Month") %>%
-    dplyr::select(-Month)
   
   #get model
   eval_res <- eval_res_list_sp[[s]]
@@ -463,9 +403,7 @@ morans_I_list[[2]]
 #   colnames(tib_all_v)[v] <- v_list_all[v]
 #   print(nm)
 # }
-# tib_all_v$Month <- rep(1:12, times = 21, each = ncell(st_list_NEA2[[1]][[1]]))
 # tib_all_v$Year <- rep(2000:2020, times = 1, each = ncell(st_list_NEA2[[1]][[1]])*12)
-# # tib_all_v$ac <- rep(0, nrow(tib_all_v))
 # colnames(tib_all_v)[which(colnames(tib_all_v) %in% c("ene_char", "sub_char"))] <- c("seabed_energy", "seabed_substrate")
 # 
 # head(tib_all_v)
@@ -484,22 +422,12 @@ for (s in 1:nrow(species_sp)) {
   
   #2. make original prediction
   df_pred <- rbind(pr_predv[[s]], bg_predv[[s]])
-  if(all(c("seabed_energy", "seabed_substrate", "Month") %in% names(df_pred))) {
-    df_pred <- df_pred %>%
-      left_join(substr_lvl, by = "seabed_substrate") %>%
-      left_join(energy_lvl, by = "seabed_energy") %>%
-      left_join(month_lvl, by = "Month") %>%
-      select(-seabed_substrate, -seabed_energy, -Month)
-  }
-  else if(all(c("seabed_energy", "seabed_substrate") %in% names(df_pred))) {
+  if(all(c("seabed_energy", "seabed_substrate") %in% names(df_pred))) {
     df_pred <- df_pred %>%
       left_join(substr_lvl, by = "seabed_substrate") %>%
       left_join(energy_lvl, by = "seabed_energy") %>%
       select(-seabed_substrate, -seabed_energy)
   }
-  else if (c("Month") %in% names(df_pred)) df_pred <- df_pred %>%
-    left_join(month_lvl, by = "Month") %>%
-    select(-Month)
   
   prediction1 <- predict(mod.seq, df_pred, 
                          se.fit=TRUE, type = "cloglog", 
@@ -524,35 +452,6 @@ for (s in 1:nrow(species_sp)) {
       ind_tib <- which(names(tib_all_v) == var_name)
       
       df_pred_res[,ind_df] <- sample(pull(na.omit(tib_all_v[,ind_tib])), nrow(df_pred_res))
-      
-      #sample each raster taking into account month & year - very slow!
-      
-      # df_pred_res <- df_pred
-      # 
-      # # Loop through unique combinations of Year and Month
-      # unique_combinations <- df_pred_res %>%
-      #   distinct(Year, Month)
-      # 
-      # for (i in 1:nrow(unique_combinations)) {
-      #   year <- unique_combinations$Year[i]
-      #   month <- unique_combinations$Month[i]
-      #   
-      #   # Get the rows that match the current Year and Month
-      #   ind_rows <- which(df_pred_res$Month == month & df_pred_res$Year == year)
-      #   
-      #   # Filter and sample from tib_all_v
-      #   sample_tib <- tib_all_v %>%
-      #     filter(Year == year, Month == month) %>%
-      #     select({{var_name}}) %>%
-      #     na.omit() %>%
-      #     pull()
-      #   
-      #   n <- length(ind_rows)
-      #   
-      #   # Replace the values in df_pred_res
-      #   df_pred_res[ind_rows, ind_df] <- sample(sample_tib, n)
-      #   print(paste0(i,"/", nrow(unique_combinations)))
-      # }
       
       #4. make new prediction
       prediction2 <- predict(mod.seq, df_pred_res, se.fit=TRUE, type = "cloglog")
