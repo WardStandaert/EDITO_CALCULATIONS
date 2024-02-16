@@ -1,7 +1,7 @@
 pckgs <- c("raster","sp","proj4","ncdf4","car","mgcv","dismo","rJava","ENMeval","randomForest", "VSURF",
            "randomForestSRC","ggRandomForests","ggplot2","boot","gstat","mgcv","SDMtune","ENMeval",
            "tidyverse","mapdata","base","tidync", "sf", "usdm", "mapview", "tictoc", "ape", "spdep",
-           "spThin", "StatMatch")
+           "spThin", "StatMatch", "rgeos", "CoordinateCleaner")
 lapply(pckgs, require, character.only = TRUE)
 rm(pckgs)
 setwd("DATA")
@@ -22,94 +22,62 @@ dati_sp <- rbind(herring_sp %>% dplyr::select(lon, lat, Year = year, Month = mon
                    mutate(scientificname = "Scomber scombrus"))
 rm(herring_sp, mackerel_sp)
 
+#### Clean data ----
+##### spatially ----
 
-#### Remove spatial outliers ----
-#1. compiled plot
-x <- data.frame(lon = dati_ad$lon, 
-                lat = dati_ad$lat, 
-                species = dati_ad$scientificname)
-coordinates(x) <- ~lon+lat
-crs(x) <- "epsg:4326"
-mapview(x, zcol = "species")
-#remove Baltic Sea observations; at longitude 9.3656°, according to marine regions
-table(dati_ad$scientificname)
-dati_ad <- dati_ad %>%
-  filter(lon <= 9.3656)
-table(dati_ad$scientificname)
-
-#remove outlying observations of mackerel in northeast
-dati_ad <- dati_ad %>%
-  filter(!(lon < -12 & lat > 55))
-table(dati_ad$scientificname)
-
-#2. per species
-mapview(dati_ad %>% filter(scientificname == "Clupea harengus") %>%
-          select(lon) %>% pull(), 
-        dati_ad %>% filter(scientificname == "Clupea harengus") %>%
-          select(lat) %>% pull(), 
-        crs = "epsg:4326")
-
-
+# Remove observations outside of the study area
 dati_ad <- dati_ad %>%
   filter(!(lon < -12 | lon > 10 | lat < 48 | lat > 62))
 
-her_ad_sp <- dati_ad %>% filter(scientificname == "Clupea harengus") %>% select(lon,lat) %>% as.data.frame()
-coordinates(her_ad_sp) <- ~lon+lat
-crs(her_ad_sp) <- crs("+init=epsg:4326")
-r_proj <- spTransform(her_ad_sp, CRS("+init=epsg:3034"))
+# Remove spatial outliers
+dati_ad2 <- CoordinateCleaner::cc_outl(x = as.data.frame(dati_ad), lon = "lon", lat = "lat", 
+                                       species = "scientificname", method = "quantile", 
+                                       mltpl = 1.5, verbose = TRUE)
+#152 records removed
 
-d <- gDistance(r_proj, byid=T)
-diag(d) <- rep(NA)
-min_dist <- apply(d, 1, min, na.rm = TRUE)
-indices <- min_dist %>% 
-  sort(decreasing = TRUE) %>%
-  head(n = 10)
+#visualise results:
+table(dati_ad$scientificname) - table(dati_ad2$scientificname)
 
+#adult records removed:
+# Alosa fallax      Clupea harengus Dicentrarchus labrax     Scomber scombrus 
+#           38                    0                   25                   89 
+
+#visualize
 mapview(dati_ad %>% filter(scientificname == "Clupea harengus") %>% select(lon) %>% pull(), 
         dati_ad %>% filter(scientificname == "Clupea harengus") %>% select(lat) %>% pull(), 
-        crs = 'epsg:4326', col.regions = "green", layer.name = "background", cex = 3) +
-  mapview(dati_ad %>% filter(scientificname == "Clupea harengus") %>% slice(as.numeric(names(indices))) %>% select(lon) %>% pull(),
-          dati_ad %>% filter(scientificname == "Clupea harengus") %>% slice(as.numeric(names(indices))) %>% select(lat) %>% pull(), 
-          crs = 'epsg:4326', col.regions = "red", layer.name = "occurrences", cex = 3)
+        crs = 'epsg:4326', col.regions = "red", layer.name = "points removed", cex = 3)
 
-#remove points in southwest (lat < 48) & (lat < 50 & lon < -10)
-mapview(dati_ad %>% filter(scientificname == "Scomber scombrus") %>%
-          select(lon) %>% pull(), 
-        dati_ad %>% filter(scientificname == "Scomber scombrus") %>%
-          select(lat) %>% pull(), 
-        crs = "epsg:4326")
-mapview(dati_ad %>% filter(scientificname == "Alosa fallax") %>%
-          select(lon) %>% pull(), 
-        dati_ad %>% filter(scientificname == "Alosa fallax") %>%
-          select(lat) %>% pull(), 
-        crs = "epsg:4326")
-#remove one point west of Ireland (lon < -10)
-mapview(dati_ad %>% filter(scientificname == "Dicentrarchus labrax") %>%
-          select(lon) %>% pull(), 
-        dati_ad %>% filter(scientificname == "Dicentrarchus labrax") %>%
-          select(lat) %>% pull(), 
-        crs = "epsg:4326")
-#remove 2 solitary points off of Spain (lon < -5 & lat < 45)
-#remove 3 solitary points in east (lon > 5)
+mapview(dati_ad %>% filter(scientificname == "Scomber scombrus") %>% select(lon) %>% pull(), 
+        dati_ad %>% filter(scientificname == "Scomber scombrus") %>% select(lat) %>% pull(), 
+        crs = 'epsg:4326', col.regions = "red", layer.name = "original", cex = 3) +
+  mapview(dati_ad2 %>% filter(scientificname == "Scomber scombrus") %>% select(lon) %>% pull(),
+          dati_ad2 %>% filter(scientificname == "Scomber scombrus") %>% select(lat) %>% pull(), 
+          crs = 'epsg:4326', col.regions = "green", layer.name = "after removal", cex = 3)
 
-table(dati_ad$scientificname)
-dati_ad <- dati_ad %>% 
-  filter(!(lat < 48 & scientificname == "Clupea harengus")) %>%
-  filter(!(lat < 50 & lon < -10 & scientificname == "Clupea harengus")) %>%
-  filter(!(lon < -10 & scientificname == "Alosa fallax")) %>%
-  filter(!(lon < -5 & lat < 45 & scientificname == "Dicentrarchus labrax")) %>%
-  filter(!(lon > 5 & scientificname == "Dicentrarchus labrax"))
-table(dati_ad$scientificname)
+mapview(dati_ad %>% filter(scientificname == "Alosa fallax") %>% select(lon) %>% pull(), 
+        dati_ad %>% filter(scientificname == "Alosa fallax") %>% select(lat) %>% pull(), 
+        crs = 'epsg:4326', col.regions = "red", layer.name = "original", cex = 3) +
+  mapview(dati_ad2 %>% filter(scientificname == "Alosa fallax") %>% select(lon) %>% pull(),
+          dati_ad2 %>% filter(scientificname == "Alosa fallax") %>% select(lat) %>% pull(), 
+          crs = 'epsg:4326', col.regions = "green", layer.name = "after removal", cex = 3)
 
+mapview(dati_ad %>% filter(scientificname == "Dicentrarchus labrax") %>% select(lon) %>% pull(), 
+        dati_ad %>% filter(scientificname == "Dicentrarchus labrax") %>% select(lat) %>% pull(), 
+        crs = 'epsg:4326', col.regions = "red", layer.name = "original", cex = 3) +
+  mapview(dati_ad2 %>% filter(scientificname == "Dicentrarchus labrax") %>% select(lon) %>% pull(),
+          dati_ad2 %>% filter(scientificname == "Dicentrarchus labrax") %>% select(lat) %>% pull(), 
+          crs = 'epsg:4326', col.regions = "green", layer.name = "after removal", cex = 3)
+
+dati_ad <- dati_ad2
 
 #### Remove temporal outliers ----
 #first remove months that are not represented in surveys
 table(dati_ad$scientificname, dati_ad$Month)
 #                         1    2    3    4    6    7    8    9   10   11   12
-# Alosa fallax          108  266   11    0    0   18   99   50  114   27    2
-# Clupea harengus      1542 3493 1472   51    2  674 2685  689  887 1346  271
-# Dicentrarchus labrax   72   70   59    9    0   79   56  234  834  252   23
-# Scomber scombrus      243  522  427   10    3  572 2637 1058 2018 1462  238
+# Alosa fallax          100  252    9    0    0   18   99   45   65    1    0
+# Clupea harengus      1623 3515 1484   51    2  674 2707  721  890 1348  271
+# Dicentrarchus labrax   71   62   59    9    0   79   56  233  677  103    9
+# Scomber scombrus      248  510  388    7    3  572 2662  710 1104  994  229
 
 # remove quarter 2, months 4-6 and months 3 and 12 for Alosa fallax
 dati_ad <- dati_ad %>% 
@@ -118,16 +86,28 @@ dati_ad <- dati_ad %>%
 
 table(dati_ad$scientificname, dati_ad$Month)
 #                         1    2    3    7    8    9   10   11   12
-# Alosa fallax          108  266    0   18   99   50  114   27    0
-# Clupea harengus      1542 3493 1472  674 2685  689  887 1346  271
-# Dicentrarchus labrax   72   70   59   79   56  234  834  252   23
-# Scomber scombrus      243  522  427  572 2637 1058 2018 1462  238 
+# Alosa fallax          100  252    0   18   99   45   65    1    0
+# Clupea harengus      1623 3515 1484  674 2707  721  890 1348  271
+# Dicentrarchus labrax   71   62   59   79   56  233  677  103    9
+# Scomber scombrus      248  510  388  572 2662  710 1104  994  229
 
 
 ###1.1.2. Larval data ----
 # as a proxy for spawning areas, abbreviation sp
 
 #### Remove spatial outliers ----
+
+# Remove observations outside of the study area
+dati_ad <- dati_ad %>%
+  filter(!(lon < -12 | lon > 10 | lat < 48 | lat > 62))
+dati_sp <- dati_sp %>%
+  filter(!(lon < -12 | lon > 10 | lat < 48 | lat > 62))
+
+
+dati_sp2 <- CoordinateCleaner::cc_outl(x = as.data.frame(dati_sp), lon = "lon", lat = "lat", 
+                                       species = "scientificname", method = "quantile", 
+                                       mltpl = 1.5, verbose = TRUE)
+
 mapview(dati_sp %>% filter(scientificname == "Clupea harengus") %>% select(lon) %>% pull,
         dati_sp %>% filter(scientificname == "Clupea harengus") %>% select(lat) %>% pull,
         crs = "epsg:4326")
