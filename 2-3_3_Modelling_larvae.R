@@ -18,10 +18,10 @@ library(rasterVis)
 
 
 #0. load data & functions ----
-setwd("DATA/")
+setwd("/home/onyxia/work/BAR/DATA")
 load("SAVE/final_st_list.Rdata")
 load("SAVE/bio_dat_larvae.Rdata")
-load("SAVE/presences_after_spatial_filtering.rData")
+load("SAVE/presences_after_spatial_filtering.Rdata")
 rm(presences_list)
 
 # Variable names
@@ -59,7 +59,7 @@ pr_pa <- list()
 pr_coord <- list()
 pr_predv <- list()
 
-for (s in 1:nrow(species_sp)) {
+for (s in 1:1) {
   tmp_pres  <- reduced_dat_sp %>%
     filter(scientificname == species_sp$scientific[s])
   
@@ -83,7 +83,7 @@ bg_pa <- list()
 bg_coord <- list()
 bg_predv <- list()
 
-for (s in 1:nrow(species_sp)) {
+for (s in 1:1) {
   #create background points within ices regions that species occurs in
   tmp_dat <- reduced_dat_sp %>%
     filter(scientificname == species_sp$scientific[s])
@@ -144,11 +144,8 @@ rm(list = ls()[which(str_detect(ls(), pattern = "^tmp_"))])
 #visualize generated background points versus occurrences
 mapview(bg_coord$herring[,1], bg_coord$herring[,2], crs = 'epsg:4326', col.regions = "red", layer.name = "background", cex = 3) +
   mapview(pr_coord$herring[,1], pr_coord$herring[,2], crs = 'epsg:4326', col.regions = "green", layer.name = "occurrences", cex = 3)
-mapview(bg_coord$mackerel[,1], bg_coord$mackerel[,2], crs = 'epsg:4326', col.regions = "red", layer.name = "background", cex = 3) +
-  mapview(pr_coord$mackerel[,1], pr_coord$mackerel[,2], crs = 'epsg:4326', col.regions = "green", layer.name = "occurrences", cex = 3)
 
 mapview(pr_coord$herring[,1], pr_coord$herring[,2], crs = 'epsg:4326', col.regions = "green", layer.name = "occurrences", cex = 3)
-mapview(pr_coord$mackerel[,1], pr_coord$mackerel[,2], crs = 'epsg:4326', col.regions = "green", layer.name = "occurrences", cex = 3)
 
 # SAVE ----
 # save(pr_pa, pr_coord, pr_predv,
@@ -162,7 +159,7 @@ load("SAVE/NEA_presence_background_larvae.Rdata")
 eval_res_list_sp <- list()
 tmp_pr_predv <- list()
 tmp_bg_predv <- list()
-for (s in 1:nrow(species_sp)) {
+for (s in 1:1) {
   if(all(c("seabed_energy","seabed_substrate") %in% names(pr_predv[[s]]))) {
     tmp_pr_predv[[s]] <- pr_predv[[s]] %>%
       left_join(energy_lvl, by = "seabed_energy") %>%
@@ -214,7 +211,7 @@ for (s in 1:nrow(species_sp)) {
 # SAVE ----
 load("SAVE/NEA_ENMeval_outcomes_larvae.Rdata")
 
-for(s in 1:nrow(species_sp)) print(eval_res_list_sp[[s]] %>%  eval.results() %>% filter(delta.AICc == 0))
+for(s in 1:1) print(eval_res_list_sp[[s]] %>%  eval.results() %>% filter(delta.AICc == 0))
 
 
 #4 model evaluation AUC & TSS ----
@@ -223,7 +220,7 @@ set.seed(123)
 AUC_maxent <- list()
 TSS_maxent <- list()
 
-for (s in 1:nrow(species_sp)) {
+for (s in 1:1) {
   tic(species_sp$simple[s])
   Presences <- pr_predv[[s]]
   Background <- bg_predv[[s]]
@@ -287,7 +284,7 @@ TPR_maxent_vect   <- data.frame(matrix(nrow = 10, ncol = 2))
 TNR_maxent_vect   <- data.frame(matrix(nrow = 10, ncol = 2))
 TSS_maxent_vect   <- data.frame(matrix(nrow = 10, ncol = 2))
 
-for (s in 1:nrow(species_sp)) {
+for (s in 1:1) {
   AUC_maxent_vect[,s]  <- sapply(AUC_maxent[[s]],function(x){slot(x,'auc')})
   TPR_maxent_vect[,s]  <- sapply(TSS_maxent[[s]],function(x){slot(x,'TPR')})
   TNR_maxent_vect[,s]  <- sapply(TSS_maxent[[s]],function(x){slot(x,'TNR')})
@@ -340,7 +337,7 @@ write.csv(sum_all, "3.MODEL_OUTPUT/LARVAE/validation_metrics.csv")
 
 #5. Spatial autocorrelation ----
 morans_I_list <- list()
-for (s in 1:nrow(species_sp)) {
+for (s in 1:1) {
   tic(paste0(species_sp$simple[s], " - done"))
   eval_res <- eval_res_list_sp[[s]]
   res <- eval.results(eval_res)
@@ -378,10 +375,7 @@ for (s in 1:nrow(species_sp)) {
 
 morans_I_list[[1]]   
 #Before filtering:          Moran's I value of 0.16, expected -0.0002; significant
-#After sp & geo filtering:  Moran's I value of 0.14, expected -0.01; significant
-morans_I_list[[2]]   
-#Before filtering:          Moran's I value of 0.22, expected -; significant
-#After sp & geo filtering:  Moran's I value of 0.10, expected -0.01; significant
+#After sp & geo filtering:  Moran's I value of 0.10, expected -0.03; significant
 
 
 #6. variable importance ----
@@ -406,13 +400,19 @@ morans_I_list[[2]]
 # tib_all_v$Year <- rep(2000:2020, times = 1, each = ncell(st_list_NEA2[[1]][[1]])*12)
 # colnames(tib_all_v)[which(colnames(tib_all_v) %in% c("ene_char", "sub_char"))] <- c("seabed_energy", "seabed_substrate")
 # 
+# tib_all_v <- tib_all_v %>%
+#   left_join(substr_lvl %>% mutate(seabed_substrate = as.numeric(seabed_substrate)), by = "seabed_substrate") %>%
+#   left_join(energy_lvl %>% mutate(seabed_energy = as.numeric(seabed_energy)), by = "seabed_energy") %>%
+#   dplyr::select(-seabed_substrate, -seabed_energy)
+# 
+# 
 # head(tib_all_v)
 # 
 # save(tib_all_v, file = "SAVE/tib_all_v.Rdata")
-load("SAVE/tib_all_v.rData")
+load("SAVE/tib_all_v.Rdata")
 
 cor_maxnet <- list()
-for (s in 1:nrow(species_sp)) {
+for (s in 1:1) {
   #1. get best model (based on AICc criterion)
   tic(paste0(species_sp$simple[s], " - done"))
   eval_res <- eval_res_list_sp[[s]]

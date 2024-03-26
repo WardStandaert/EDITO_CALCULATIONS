@@ -1,26 +1,34 @@
-pckgs <- c("raster","sp","proj4","ncdf4","car","mgcv","dismo","rJava","ENMeval","randomForest", "VSURF",
-           "randomForestSRC","ggRandomForests","ggplot2","boot","gstat","mgcv","SDMtune","ENMeval",
-           "tidyverse","mapdata","base","tidync", "sf", "usdm", "mapview", "tictoc", "ape", "spdep",
-           "spThin", "StatMatch", "rgeos", "CoordinateCleaner")
-lapply(pckgs, require, character.only = TRUE)
+pckgs <- c("raster","sp","proj4","ncdf4","car","mgcv","dismo","rJava","ENMeval",
+           "randomForest", "ggplot2","boot","gstat","mgcv", "ENMeval", "tidyverse",
+           "mapdata","base","tidync", "sf", "mapview", "tictoc", "ape", "spdep",
+           "spThin", "StatMatch", "CoordinateCleaner", "spatialRF")
+pckgs[which(lapply(pckgs, require, character.only = TRUE) == FALSE)]
 rm(pckgs)
-setwd("DATA")
+setwd("/home/onyxia/work/BAR/DATA")
 
 #1. Read & organize data -----
 
 ##1.1. Biological data ----
 ###1.1.1. Adult data ----
-load("2.PREPROCESSED/biology/her_mack_tws_seab_adults.Rdata")
+
+
+
+load("2.PREPROCESSED/biology/her_mack_tws_seab_adults.RData")
+
+dati_ad <- dati_ad %>% filter(scientificname == "Clupea harengus")
 
 #read spawning data
-herring_sp <- read.csv("2.PREPROCESSED/biology/OBIS_larvae_herring_2000-2020.csv")
-mackerel_sp <- read.csv("2.PREPROCESSED/biology/OBIS_larvae_mackerel_2000-2020.csv")
+library(robis)
 
-dati_sp <- rbind(herring_sp %>% dplyr::select(lon, lat, Year = year, Month = month, Day = day) %>%
-                   mutate(scientificname = "Clupea harengus"),
-                 mackerel_sp %>% dplyr::select(lon, lat, Year = year, Month = month, Day = day) %>%
-                   mutate(scientificname = "Scomber scombrus"))
-rm(herring_sp, mackerel_sp)
+dati_lv <- occurrence("Clupea harengus",
+                      datasetid = "94829f49-bab5-48a5-9a64-38425f8ec640",
+                      geometry = "POLYGON ((-12 48,-12 62,10 62,10 48,-12 48))",
+                      startdate = as.Date("2000-01-01"),
+                      enddate = as.Date("2020-12-31")) 
+
+dati_lv <- dati_lv %>%
+  select(lon = decimalLongitude, lat = decimalLatitude, Year = year, Month = month, Day = day)
+
 
 #### Clean data ----
 ##### spatially ----
@@ -31,8 +39,7 @@ dati_ad <- dati_ad %>%
 
 # Remove spatial outliers
 dati_ad2 <- CoordinateCleaner::cc_outl(x = as.data.frame(dati_ad), lon = "lon", lat = "lat", 
-                                       species = "scientificname", method = "quantile", 
-                                       mltpl = 1.5, verbose = TRUE)
+                                       method = "quantile", mltpl = 1.5, verbose = TRUE)
 #152 records removed
 
 #visualise results:
@@ -45,7 +52,7 @@ table(dati_ad$scientificname) - table(dati_ad2$scientificname)
 #visualize
 mapview(dati_ad %>% filter(scientificname == "Clupea harengus") %>% select(lon) %>% pull(), 
         dati_ad %>% filter(scientificname == "Clupea harengus") %>% select(lat) %>% pull(), 
-        crs = 'epsg:4326', col.regions = "red", layer.name = "points removed", cex = 3)
+        crs = 'epsg:4326', col.regions = "red", layer.name = "original", cex = 3)
 
 mapview(dati_ad %>% filter(scientificname == "Scomber scombrus") %>% select(lon) %>% pull(), 
         dati_ad %>% filter(scientificname == "Scomber scombrus") %>% select(lat) %>% pull(), 
@@ -108,32 +115,23 @@ dati_sp2 <- CoordinateCleaner::cc_outl(x = as.data.frame(dati_sp), lon = "lon", 
                                        species = "scientificname", method = "quantile", 
                                        mltpl = 1.5, verbose = TRUE)
 
+#Removed 0 records.
+
 mapview(dati_sp %>% filter(scientificname == "Clupea harengus") %>% select(lon) %>% pull,
         dati_sp %>% filter(scientificname == "Clupea harengus") %>% select(lat) %>% pull,
-        crs = "epsg:4326")
-mapview(dati_sp %>% filter(scientificname == "Scomber scombrus") %>% select(lon) %>% pull,
-        dati_sp %>% filter(scientificname == "Scomber scombrus") %>% select(lat) %>% pull,
         crs = "epsg:4326")
 #no outliers
 
 #### Remove temporal outliers ----
 #remove months that are underrepresented in surveys (month 8 for herring)
 table(dati_sp$scientificname, dati_sp$Month)
-#                      1     2     3     4     5     6     7     8     9    10    12
-# Clupea harengus   2293     0     0     0     0     0     0     0  4480    99  1030
-# Scomber scombrus    70   765  6423 12325 13531 11426  1776     1     0     0     0
-
-dati_sp <- dati_sp %>% filter(!(Month %in% c(8)))
-
-table(dati_sp$scientificname, dati_sp$Month)
-#                      1     2     3     4     5     6     7     9    10    12
-# Clupea harengus   2293     0     0     0     0     0     0  4480    99  1030
-# Scomber scombrus    70   765  6423 12325 13531 11426  1776     0     0     0
+#                    1    9   10   12
+# Clupea harengus 2293 4480   99 1030
 
 
 #### Add ICES Area 27 to larvae occurrences ----
 # ICES areas derived from https://gis.ices.dk on 18/12/2023
-ices_shp <- st_read("1.DOWNLOAD/ICES_areas/ICES_Areas_20160601_cut_dense_3857.shp")
+ices_shp <- st_read("1.DOWNLOAD/shapefiles/ICES_areas/ICES_Areas_20160601_cut_dense_3857.shp")
 mapview(ices_shp)
 
 ices_shp_t <- st_transform(ices_shp, "epsg:4326") %>%
@@ -199,31 +197,6 @@ head(dati_sp)
 # load files directly
 load("SAVE/stacked_vars_not_cropped.Rdata")
 
-# only run once
-### create an average and standard deviation of layers over 2000-2020 for each environmental variable ----
-# for (v in 1:nrow(fls_NEA)) {
-#   tmp_st <- stack(paste("2.PREPROCESSED/environmental_variables/", fls_NEA$full_name[v], sep = ""))
-#   # no need to do this for static variables
-#   if (nlayers(tmp_st) == 1) next
-#   else {
-#     tmp_nms <- tibble(name = names(tmp_st),
-#                       year = str_extract(name, "\\d{4}"),
-#                       month = str_remove(str_extract(name, "_\\d{2}|_\\d"), "_"))
-#     for (m in 1:12) {
-#       tmp_ind <- which(tmp_nms$month == m)
-#       av_NEA <- stackApply(tmp_st[[tmp_ind]], indices =  rep(1, length(tmp_ind)), mean, na.rm = T)
-#       sd_NEA <- stackApply(tmp_st[[tmp_ind]], indices =  rep(1, length(tmp_ind)), sd, na.rm = T)
-#       writeRaster(av_NEA,
-#                   paste0("2.PREPROCESSED/environmental_variables/average_standard_deviation/NEA_average_",
-#                          fls_NEA$shrt_name[v],"_",
-#                          m,".tif"), overwrite = T)
-#       writeRaster(sd_NEA,
-#                   paste0("2.PREPROCESSED/environmental_variables/average_standard_deviation/NEA_sd_",
-#                          fls_NEA$shrt_name[v],"_",
-#                          m,".tif"), overwrite = T)
-#     }
-#   }
-# }
 
 ### crop of layers ----
 # first general crop of layers to their common extent
@@ -274,10 +247,14 @@ f_vif <- function(stack_list, retained_vars) {
       st_df <- as.data.frame(as(tmp_st, "SpatialPixelsDataFrame")) %>%
         select(-x,-y)
       
+      #remove columns that have 0 variance (only 1 unique value)
+      st_df <- st_df %>%
+        select(where(~n_distinct(.) > 1))
+
       tmp_vif <- vif(st_df)
       tmp_vif_tab <- tmp_vif %>%
-        mutate(Var = str_remove_all(Variables , "_\\d{4}_\\d{2}|_\\d{4}_\\d")) %>%
-        select(Var, VIF)
+        mutate(Var = str_remove_all(variable , "_\\d{4}_\\d{2}|_\\d{4}_\\d")) %>%
+        select(Var, vif)
       colnames(tmp_vif_tab) <- c("Var", paste("VIF",c(2000:2020)[y],m,sep = "_"))
       vif_tab <- left_join(vif_tab, tmp_vif_tab, by = "Var")
     }
@@ -351,8 +328,6 @@ for (y in 1:length(2000:2020)) {
 rm(tmp_extract, tmp_coords_dat, tmp_df)
 
 # investigate observations without corresponding environmental values (NA-values) ----
-any(is.na(full_dat$Gear)) #no NA values
-any(is.na(full_dat$Ship)) #no NA values
 na_dat <- full_dat %>% filter(is.na(depth) | is.na(max_SSV) | is.na(Phyto) | 
                                 is.na(seabed_energy) | is.na(seabed_substrate) | is.na(SSS) | 
                                 is.na(SST) | is.na(windfarms) | is.na(ZooPl))
@@ -439,7 +414,7 @@ table(full_dat$scientificname)
 # Alosa fallax      Clupea harengus Dicentrarchus labrax     Scomber scombrus 
 #          546                12898                 1043                 7275 
 
-num_pr_vector <- c(400,400,160,160)
+num_pr_vector <- c(400,400,160,140)
 
 red_dat <- list()
 for (s in 1:nrow(species)) {
@@ -510,7 +485,6 @@ for (s in 1:nrow(species_sp)) {
 }
 
 mapview(presences_list_sp[[1]]$Longitude, presences_list_sp[[1]]$Latitude, crs = 'epsg:4326')
-mapview(presences_list_sp[[2]]$Longitude, presences_list_sp[[2]]$Latitude, crs = 'epsg:4326')
 
 ### sampling bias: environmental filtering ----
 table(full_dat_sp$scientificname)
@@ -557,12 +531,10 @@ for (s in 1:nrow(species_sp)) {
   print(name)
 }
 
-reduced_dat_sp <- bind_rows(red_dat_sp)
-table(reduced_dat_sp$scientificname)
-# Clupea harengus Scomber scombrus 
-#             400              400
+reduced_dat_sp <- red_dat_sp[[1]]
 
-table(reduced_dat_sp$scientificname, reduced_dat_sp$Month)
+
+table(reduced_dat_sp$Month)
 #                    1   2   3   4   5   6   7   9  10  12
 # Clupea harengus  145   0   0   0   0   0   0 216   3  36
 # Scomber scombrus   0   4  46  43 120 158  29   0   0   0

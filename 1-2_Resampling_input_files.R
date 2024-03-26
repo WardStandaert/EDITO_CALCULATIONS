@@ -2,13 +2,11 @@ library(ncdf4)
 library(raster)
 library(tidyverse)
 library(terra)
-library(gdalUtils)
-library(rgdal)
 
 # resample files to resolution of biological data (10 NM x 10 NM) ----
 ## netcdf files ----
 
-setwd("DATA")
+setwd("/home/onyxia/work/BAR/DATA")
 
 nc_chl <- ncdf4::nc_open("1.DOWNLOAD/environmental_variables/chlorophyll_concentration.nc")
 v <- nc_chl$var[[1]]
@@ -53,7 +51,6 @@ r_extent <- extent(r_ex,
 r_ex <- crop(r_ex, r_extent)
 
 layout(matrix(1:2, nrow=1))
-windows()
 plot(st_chl[[1]])
 plot(r_ex)
 
@@ -130,7 +127,7 @@ for (f in fls) {
 
 ## tif files (numerical - bilinear) ----
 fls <- list.files("1.DOWNLOAD/environmental_variables/", pattern = ".tif$", full.names = "TRUE")
-for (f in fls[c(1,2)]) {
+for (f in fls[1]) {
   r_f <- raster(f)
   r_name <- f %>% str_remove(".tif$") %>% str_remove("1.DOWNLOAD/environmental_variables/")
   
@@ -143,7 +140,7 @@ for (f in fls[c(1,2)]) {
 
 ## tif files (categorical - nearest neighbour) ----
 fls <- list.files("1.DOWNLOAD/environmental_variables/", pattern = ".tif$", full.names = "TRUE")
-for (f in fls[c(3,4)]) {
+for (f in fls[c(2,3)]) {
   r_f <- raster(f)
   r_name <- f %>% str_remove(".tif$") %>% str_remove("1.DOWNLOAD/environmental_variables/")
   
