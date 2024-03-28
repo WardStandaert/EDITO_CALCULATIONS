@@ -1,3 +1,4 @@
+# Prepare data extraction ----
 setwd("~/work/EDITO_CALCULATIONS/zarr_extraction/")
 
 # load functions, but also cached stac catalog named stacCatalog
@@ -40,6 +41,7 @@ for ( parameter in parameters) {
   }
 }
 
+# Extract data ----
 #add verbose= anything to get additional info on the positions ( par_x, par_y, par_z ) and time (par_t) found in the zarr files
 enhanced_DF=enhanceDF(inputPoints = pts, 
                       requestedParameters = parameters, 
@@ -47,8 +49,109 @@ enhanced_DF=enhanceDF(inputPoints = pts,
                       stacCatalogue = EDITOSTAC, 
                       verbose="on")
 
+glimpse(enhanced_DF)
 glimpse(enhanced_DF %>% select(all_of(c(nms,parameters)[order(c(nms,parameters))])))
 
+# Check difference in time  ----
+
+enhanced_DF$Time - enhanced_DF$thetao_t
+enhanced_DF$Time - enhanced_DF$so_t
+enhanced_DF$Time - enhanced_DF$zooc_t
+enhanced_DF$Time - enhanced_DF$phyc_t
+
+# Check difference in space  ----
+library(geosphere)
+
+enhanced_DF$thetao_dist <- apply(enhanced_DF, 1, function(row) {
+  # Convert elements to numeric
+  lon <- as.numeric(row["lon"])
+  lat <- as.numeric(row["lat"])
+  thetao_x <- as.numeric(row["thetao_x"])
+  thetao_y <- as.numeric(row["thetao_y"])
+  
+  # Calculate distance
+  distm(c(lon, lat), c(thetao_x, thetao_y), fun = distHaversine)
+})
+
+enhanced_DF$so_dist <- apply(enhanced_DF, 1, function(row) {
+  # Convert elements to numeric
+  lon <- as.numeric(row["lon"])
+  lat <- as.numeric(row["lat"])
+  so_x <- as.numeric(row["so_x"])
+  so_y <- as.numeric(row["so_y"])
+  
+  # Calculate distance
+  distm(c(lon, lat), c(so_x, so_y), fun = distHaversine)
+})
+
+enhanced_DF$zooc_dist <- apply(enhanced_DF, 1, function(row) {
+  # Convert elements to numeric
+  lon <- as.numeric(row["lon"])
+  lat <- as.numeric(row["lat"])
+  zooc_x <- as.numeric(row["zooc_x"])
+  zooc_y <- as.numeric(row["zooc_y"])
+  
+  # Calculate distance
+  distm(c(lon, lat), c(zooc_x, zooc_y), fun = distHaversine)
+})
+
+enhanced_DF$phyc_dist <- apply(enhanced_DF, 1, function(row) {
+  # Convert elements to numeric
+  lon <- as.numeric(row["lon"])
+  lat <- as.numeric(row["lat"])
+  phyc_x <- as.numeric(row["phyc_x"])
+  phyc_y <- as.numeric(row["phyc_y"])
+  
+  # Calculate distance
+  distm(c(lon, lat), c(phyc_x, phyc_y), fun = distHaversine)
+})
+
+enhanced_DF$elevation_dist <- apply(enhanced_DF, 1, function(row) {
+  # Convert elements to numeric
+  lon <- as.numeric(row["lon"])
+  lat <- as.numeric(row["lat"])
+  elevation_x <- as.numeric(row["elevation_x"])
+  elevation_y <- as.numeric(row["elevation_y"])
+  
+  # Calculate distance
+  distm(c(lon, lat), c(elevation_x, elevation_y), fun = distHaversine)
+})
+
+enhanced_DF$Substrate_dist <- apply(enhanced_DF, 1, function(row) {
+  # Convert elements to numeric
+  lon <- as.numeric(row["lon"])
+  lat <- as.numeric(row["lat"])
+  Substrate_x <- as.numeric(row["Substrate_x"])
+  Substrate_y <- as.numeric(row["Substrate_y"])
+  
+  # Calculate distance
+  distm(c(lon, lat), c(Substrate_x, Substrate_y), fun = distHaversine)
+})
+
+enhanced_DF$Energy_dist <- apply(enhanced_DF, 1, function(row) {
+  # Convert elements to numeric
+  lon <- as.numeric(row["lon"])
+  lat <- as.numeric(row["lat"])
+  Energy_x <- as.numeric(row["Energy_x"])
+  Energy_y <- as.numeric(row["Energy_y"])
+  
+  # Calculate distance
+  distm(c(lon, lat), c(Energy_x, Energy_y), fun = distHaversine)
+})
+
+glimpse(enhanced_DF)
+
+par(mfrow = c(3,3))
+hist(enhanced_DF$thetao_dist)
+hist(enhanced_DF$so_dist)
+hist(enhanced_DF$phyc_dist)
+hist(enhanced_DF$zooc_dist)
+hist(enhanced_DF$elevation_dist)
+hist(enhanced_DF$Substrate_dist)
+hist(enhanced_DF$Energy_dist)
+
+# Compare with original extraction  ----
+## Numerical variables ----
 par(mfrow = c(3,2))
 plot(enhanced_DF$SST, enhanced_DF$thetao, cex.lab=1.3,
      xlim = c(min(enhanced_DF$SST, enhanced_DF$thetao), max(enhanced_DF$SST, enhanced_DF$thetao)),
@@ -66,6 +169,7 @@ plot(enhanced_DF$depth, enhanced_DF$elevation, cex.lab=1.3,
      xlim = c(min(enhanced_DF$depth, enhanced_DF$elevation), max(enhanced_DF$depth, enhanced_DF$elevation)),
      ylim = c(min(enhanced_DF$depth, enhanced_DF$elevation), max(enhanced_DF$depth, enhanced_DF$elevation)))
 
+## Categorical variables ----
 substr_lvl <- tibble(sub_char = c("Fine mud", "Sand", "Muddy sand", "Mixed sediment",
                                   "Coarse substrate","Sandy mud or Muddy sand", "Seabed",
                                   "Rock or other hard substrata","Sandy mud", "Sandy mud or Muddy sand ",
@@ -78,7 +182,6 @@ enhanced_DF <- enhanced_DF %>%
   left_join(substr_lvl, by = c("seabed_substrate")) %>%
   left_join(energy_lvl, by = c("seabed_energy")) 
 
-# write.csv(enhanced_DF, "tst/extract_test.csv")
 glimpse(enhanced_DF)
 
 sum(enhanced_DF$Energy_Description == enhanced_DF$ene_char) / length(enhanced_DF$Energy_Description)
@@ -107,3 +210,5 @@ enhanced_DF %>%
   mutate(old_extraction = n.y,
          EDITO_extraction = n.x) %>%
   select(-n.x, -n.y)
+
+write.csv(enhanced_DF, "tst/extract_test.csv")
