@@ -29,7 +29,8 @@ dati_lv <- occurrence("Clupea harengus",
 dati_lv <- dati_lv %>%
   select(lon = decimalLongitude, lat = decimalLatitude, Year = year, Month = month, Day = day)
 
-
+glimpse(dati_lv)
+dati_lv$dataset
 #### Clean data ----
 ##### spatially ----
 
