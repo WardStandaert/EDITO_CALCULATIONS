@@ -6,7 +6,7 @@ library(terra)
 # resample files to resolution of biological data (10 NM x 10 NM) ----
 ## netcdf files ----
 
-setwd("/home/onyxia/work/BAR/DATA")
+setwd("C:/Users/ward.standaert/Documents/GitHub/EDITO_CALCULATIONS/")
 
 nc_chl <- ncdf4::nc_open("1.DOWNLOAD/environmental_variables/chlorophyll_concentration.nc")
 v <- nc_chl$var[[1]]

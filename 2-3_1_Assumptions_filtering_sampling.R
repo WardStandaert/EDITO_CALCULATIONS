@@ -4,130 +4,39 @@ pckgs <- c("raster","sp","proj4","ncdf4","car","mgcv","dismo","rJava","ENMeval",
            "spThin", "StatMatch", "CoordinateCleaner", "spatialRF")
 pckgs[which(lapply(pckgs, require, character.only = TRUE) == FALSE)]
 rm(pckgs)
-setwd("/home/onyxia/work/BAR/DATA")
+setwd("C:/Users/ward.standaert/OneDrive - VLIZ/BAR ecological modelling/MDA storage/Data-driven approach/DATA")
 
 #1. Read & organize data -----
 
 ##1.1. Biological data ----
-###1.1.1. Adult data ----
-
-
-
-load("2.PREPROCESSED/biology/her_mack_tws_seab_adults.RData")
-
-dati_ad <- dati_ad %>% filter(scientificname == "Clupea harengus")
-
-#read spawning data
-library(robis)
-
-dati_lv <- occurrence("Clupea harengus",
-                      datasetid = "94829f49-bab5-48a5-9a64-38425f8ec640",
-                      geometry = "POLYGON ((-12 48,-12 62,10 62,10 48,-12 48))",
-                      startdate = as.Date("2000-01-01"),
-                      enddate = as.Date("2020-12-31")) 
-
-dati_lv <- dati_lv %>%
-  select(lon = decimalLongitude, lat = decimalLatitude, Year = year, Month = month, Day = day)
-
-glimpse(dati_lv)
-dati_lv$dataset
-#### Clean data ----
-##### spatially ----
-
-# Remove observations outside of the study area
-dati_ad <- dati_ad %>%
-  filter(!(lon < -12 | lon > 10 | lat < 48 | lat > 62))
-
-# Remove spatial outliers
-dati_ad2 <- CoordinateCleaner::cc_outl(x = as.data.frame(dati_ad), lon = "lon", lat = "lat", 
-                                       method = "quantile", mltpl = 1.5, verbose = TRUE)
-#152 records removed
-
-#visualise results:
-table(dati_ad$scientificname) - table(dati_ad2$scientificname)
-
-#adult records removed:
-# Alosa fallax      Clupea harengus Dicentrarchus labrax     Scomber scombrus 
-#           38                    0                   25                   89 
-
-#visualize
-mapview(dati_ad %>% filter(scientificname == "Clupea harengus") %>% select(lon) %>% pull(), 
-        dati_ad %>% filter(scientificname == "Clupea harengus") %>% select(lat) %>% pull(), 
-        crs = 'epsg:4326', col.regions = "red", layer.name = "original", cex = 3)
-
-mapview(dati_ad %>% filter(scientificname == "Scomber scombrus") %>% select(lon) %>% pull(), 
-        dati_ad %>% filter(scientificname == "Scomber scombrus") %>% select(lat) %>% pull(), 
-        crs = 'epsg:4326', col.regions = "red", layer.name = "original", cex = 3) +
-  mapview(dati_ad2 %>% filter(scientificname == "Scomber scombrus") %>% select(lon) %>% pull(),
-          dati_ad2 %>% filter(scientificname == "Scomber scombrus") %>% select(lat) %>% pull(), 
-          crs = 'epsg:4326', col.regions = "green", layer.name = "after removal", cex = 3)
-
-mapview(dati_ad %>% filter(scientificname == "Alosa fallax") %>% select(lon) %>% pull(), 
-        dati_ad %>% filter(scientificname == "Alosa fallax") %>% select(lat) %>% pull(), 
-        crs = 'epsg:4326', col.regions = "red", layer.name = "original", cex = 3) +
-  mapview(dati_ad2 %>% filter(scientificname == "Alosa fallax") %>% select(lon) %>% pull(),
-          dati_ad2 %>% filter(scientificname == "Alosa fallax") %>% select(lat) %>% pull(), 
-          crs = 'epsg:4326', col.regions = "green", layer.name = "after removal", cex = 3)
-
-mapview(dati_ad %>% filter(scientificname == "Dicentrarchus labrax") %>% select(lon) %>% pull(), 
-        dati_ad %>% filter(scientificname == "Dicentrarchus labrax") %>% select(lat) %>% pull(), 
-        crs = 'epsg:4326', col.regions = "red", layer.name = "original", cex = 3) +
-  mapview(dati_ad2 %>% filter(scientificname == "Dicentrarchus labrax") %>% select(lon) %>% pull(),
-          dati_ad2 %>% filter(scientificname == "Dicentrarchus labrax") %>% select(lat) %>% pull(), 
-          crs = 'epsg:4326', col.regions = "green", layer.name = "after removal", cex = 3)
-
-dati_ad <- dati_ad2
-
-#### Remove temporal outliers ----
-#first remove months that are not represented in surveys
-table(dati_ad$scientificname, dati_ad$Month)
-#                         1    2    3    4    6    7    8    9   10   11   12
-# Alosa fallax          100  252    9    0    0   18   99   45   65    1    0
-# Clupea harengus      1623 3515 1484   51    2  674 2707  721  890 1348  271
-# Dicentrarchus labrax   71   62   59    9    0   79   56  233  677  103    9
-# Scomber scombrus      248  510  388    7    3  572 2662  710 1104  994  229
-
-# remove quarter 2, months 4-6 and months 3 and 12 for Alosa fallax
-dati_ad <- dati_ad %>% 
-  filter(!(Month %in% c(4,6))) %>%
-  filter(!(scientificname == "Alosa fallax" & Month %in% c(3,12)))
-
-table(dati_ad$scientificname, dati_ad$Month)
-#                         1    2    3    7    8    9   10   11   12
-# Alosa fallax          100  252    0   18   99   45   65    1    0
-# Clupea harengus      1623 3515 1484  674 2707  721  890 1348  271
-# Dicentrarchus labrax   71   62   59   79   56  233  677  103    9
-# Scomber scombrus      248  510  388  572 2662  710 1104  994  229
-
-
-###1.1.2. Larval data ----
 # as a proxy for spawning areas, abbreviation sp
 
 #### Remove spatial outliers ----
 
 # Remove observations outside of the study area
-dati_ad <- dati_ad %>%
-  filter(!(lon < -12 | lon > 10 | lat < 48 | lat > 62))
+dati_sp <- read.csv("2.PREPROCESSED/biology/OBIS_larvae_herring_2000-2020.csv")
+
 dati_sp <- dati_sp %>%
-  filter(!(lon < -12 | lon > 10 | lat < 48 | lat > 62))
+  dplyr::select(lon, lat, Year = year, Month = month, Day = day) %>%
+  filter(!(lon < -12 | lon > 10 | lat < 48 | lat > 62)) %>%
+  mutate(species = "herring")
 
 
-dati_sp2 <- CoordinateCleaner::cc_outl(x = as.data.frame(dati_sp), lon = "lon", lat = "lat", 
-                                       species = "scientificname", method = "quantile", 
-                                       mltpl = 1.5, verbose = TRUE)
+# dati_sp2 <- CoordinateCleaner::cc_outl(x = as.data.frame(dati_sp), lon = "lon", lat = "lat", 
+#                                        method = "quantile", mltpl = 1.5, verbose = TRUE)
 
 #Removed 0 records.
 
-mapview(dati_sp %>% filter(scientificname == "Clupea harengus") %>% select(lon) %>% pull,
-        dati_sp %>% filter(scientificname == "Clupea harengus") %>% select(lat) %>% pull,
+mapview(dati_sp %>% dplyr::select(lon) %>% pull,
+        dati_sp %>% dplyr::select(lat) %>% pull,
         crs = "epsg:4326")
-#no outliers
+#no spatial outliers
 
 #### Remove temporal outliers ----
 #remove months that are underrepresented in surveys (month 8 for herring)
-table(dati_sp$scientificname, dati_sp$Month)
-#                    1    9   10   12
-# Clupea harengus 2293 4480   99 1030
+table(dati_sp$Month)
+#    1    9   10   12
+# 2293 4480   99 1030
 
 
 #### Add ICES Area 27 to larvae occurrences ----
@@ -246,16 +155,16 @@ f_vif <- function(stack_list, retained_vars) {
     for (m in 1:12) {
       tmp_st <- st_list_NEA2[[y]][[m]][[which(str_detect(names(st_list_NEA2[[y]][[m]]), paste(retained_vars, collapse = "|")))]]
       st_df <- as.data.frame(as(tmp_st, "SpatialPixelsDataFrame")) %>%
-        select(-x,-y)
+        dplyr::select(-x,-y)
       
       #remove columns that have 0 variance (only 1 unique value)
       st_df <- st_df %>%
-        select(where(~n_distinct(.) > 1))
+        dplyr::select(where(~n_distinct(.) > 1))
 
-      tmp_vif <- vif(st_df)
+      tmp_vif <- spatialRF::vif(st_df)
       tmp_vif_tab <- tmp_vif %>%
         mutate(Var = str_remove_all(variable , "_\\d{4}_\\d{2}|_\\d{4}_\\d")) %>%
-        select(Var, vif)
+        dplyr::select(Var, vif)
       colnames(tmp_vif_tab) <- c("Var", paste("VIF",c(2000:2020)[y],m,sep = "_"))
       vif_tab <- left_join(vif_tab, tmp_vif_tab, by = "Var")
     }
@@ -303,56 +212,12 @@ for (y in 1:length(2000:2020)) {
 }
 
 #2. Sample environmental variables with biological data ----
-
-##2.1 Adult data ----
-### remove duplicates in space & time ----
-dati_ad <- dati_ad %>% 
-  distinct(Year, Month, lon, lat, scientificname, .keep_all = TRUE)
-
-### sampling ----
-coords_dat <- dati_ad %>% select(lon, lat, Year, Month, Day, scientificname, Area_27)
-full_dat <- data.frame()
-for (y in 1:length(2000:2020)) {
-  for (m in 1:12) {
-    tmp_coords_dat <- coords_dat %>%
-      filter(Year == c(2000:2020)[y],
-             Month == m)
-    tmp_extract <- raster::extract(st_list_NEA_cl[[y]][[m]], 
-                                   as.data.frame(tmp_coords_dat[,c(1,2)]), method = "simple")
-    colnames(tmp_extract) <- colnames(tmp_extract) %>%
-      str_remove_all("_\\d{4}_\\d{2}|_\\d{4}_\\d")
-    tmp_df <- data.frame(tmp_coords_dat, tmp_extract)
-    full_dat <- rbind(full_dat, tmp_df)
-  }
-  print(y)
-}
-rm(tmp_extract, tmp_coords_dat, tmp_df)
-
-# investigate observations without corresponding environmental values (NA-values) ----
-na_dat <- full_dat %>% filter(is.na(depth) | is.na(max_SSV) | is.na(Phyto) | 
-                                is.na(seabed_energy) | is.na(seabed_substrate) | is.na(SSS) | 
-                                is.na(SST) | is.na(windfarms) | is.na(ZooPl))
-
-head(na_dat)
-mapview::mapview(na_dat$lon, na_dat$lat, crs = CRS("epsg:4326"), legend = FALSE) +
-  mapview::mapview(st_list_NEA_cl[[1]][[3]][[1]], legend = FALSE)
-
-na_dat2 <- na_dat %>% drop_na(Phyto)
-head(na_dat2) ##all variables give NA-values at same points (= check that cropping was done well)
-
-rm(na_dat, na_dat2)
-
-#remove observations without corresponding environmental values
-full_dat <- full_dat %>%
-  drop_na()
-
-##2.2 Larval data ----
 ### remove duplicates ----
 dati_sp <- dati_sp %>% 
-  distinct(Year, Month, lon, lat, scientificname, .keep_all = TRUE)
+  distinct(Year, Month, lon, lat, species, .keep_all = TRUE)
 
 ### sampling ----
-coords_dat_sp <- dati_sp %>% select(lon, lat, Year, Month, Day, scientificname, Area_27)
+coords_dat_sp <- dati_sp %>% dplyr::select(lon, lat, Year, Month, Day, Area_27, species)
 full_dat_sp <- data.frame()
 for (y in 1:length(2000:2020)) {
   for (m in 1:12) {
@@ -388,152 +253,61 @@ rm(na_dat, na_dat2)
 full_dat_sp <- full_dat_sp %>%
   drop_na()
 
+nrow(full_dat_sp)
+
 #3. Sampling bias - filtering -----
-##3.1 adult data ----
+
 ### sampling bias: spatial filtering ----
-species <- tibble(scientific = c("Clupea harengus", "Scomber scombrus", "Alosa fallax", "Dicentrarchus labrax"),
-                  simple = c("herring", "mackerel", "twaite_shad", "seabass"))
-
 #thin towards minimum distance of 10 NM or 18.52 km
-presences_list <- list()
-for (s in 1:nrow(species)) {
-  tmp_df <- full_dat %>% filter(scientificname == species$scientific[s])
-  presences_list[[s]] <- spThin::thin(tmp_df, lat.col = "lat", long.col = "lon", 
-                                      spec.col = "scientificname", thin.par = 18.52, reps = 1,
-                                      write.files = FALSE, locs.thinned.list.return = TRUE)[[1]]
-  names(presences_list)[s] <- species$simple[s]
-  print(s)
+presences_list <- full_dat_sp[0,]
+for (y in 1:length(2000:2020)) {
+  for (m in 1:12) {
+    tmp_df <- full_dat_sp %>% filter(Year == c(2000:2020)[y], Month == m)
+    presences <- spThin::thin(tmp_df, lat.col = "lat", long.col = "lon", 
+                              spec.col = "species", thin.par = 18.52, reps = 3,
+                              write.files = FALSE, locs.thinned.list.return = TRUE,
+                              verbose = FALSE)[[1]]
+    presences <- presences %>% mutate(lon = Longitude, lat = Latitude) %>% left_join(tmp_df, by = c("lon","lat"))
+    presences_list <- rbind(presences_list, presences)
+  }
+  print(y)
 }
-
-mapview(presences_list[[1]]$Longitude, presences_list[[1]]$Latitude, crs = 'epsg:4326')
-mapview(presences_list[[2]]$Longitude, presences_list[[2]]$Latitude, crs = 'epsg:4326')
-mapview(presences_list[[3]]$Longitude, presences_list[[3]]$Latitude, crs = 'epsg:4326')
-mapview(presences_list[[4]]$Longitude, presences_list[[4]]$Latitude, crs = 'epsg:4326')
+nrow(presences_list)
 
 ### sampling bias: environmental filtering ----
-table(full_dat$scientificname)
-# Alosa fallax      Clupea harengus Dicentrarchus labrax     Scomber scombrus 
-#          546                12898                 1043                 7275 
+nrow(full_dat_sp)
 
-num_pr_vector <- c(400,400,160,140)
+tmp_full_dat <- presences_list
 
-red_dat <- list()
-for (s in 1:nrow(species)) {
-  name <- species$simple[s]
-  
-  tmp_full_dat <- left_join(presences_list[[which(names(presences_list) == species$simple[s])]] %>% 
-                              mutate(lon = Longitude, lat = Latitude), full_dat, by = c("lon","lat")) %>%
-    filter(scientificname == species$scientific[s])
-  
-  df_pr <- tmp_full_dat[0,]
-  df_rem <- tmp_full_dat
-  
-  #remove variables that have only one unique value
-  tmp_df <- tmp_full_dat %>% 
-    select(any_of(v_list)) %>%
-    select(where(~ length(unique(.)) != 1))
-  
-  mal_dis <- mahalanobis.dist(tmp_df)
-  
-  # Select the two points that are furthest apart based on this distance and add to df_pr
-  # (if plural pairs are present one pair is selected randomly)
-  id <- which(mal_dis == max(mal_dis), arr.ind = TRUE)
-  pnt_coord <- id[sample(nrow(id),1,replace=FALSE),]
-  df_pr <- rbind(df_pr,df_rem[as.vector(pnt_coord)[1],], df_rem[as.vector(pnt_coord)[2],])
-  # Remove this pair from the remaining points
-  df_rem <- df_rem[-c(as.vector(pnt_coord)[1],as.vector(pnt_coord)[2]),]
-  
-  # This loop now selects the point that is furthest away from the current points in df_pr
-  # in order to get a total of 75 points
-  while (nrow(df_pr) < num_pr_vector[s]) {
-    mal_dis <- mahalanobis.dist(df_pr[,12:16],df_rem[,12:16])
-    mal_dis_tot <- colSums(mal_dis)
-    id <- as.vector(which(mal_dis_tot == max(mal_dis_tot), useNames = FALSE))
-    if (length(id) > 1) {id <- sample(id,1)}
-    df_pr <- rbind(df_pr,df_rem[id,])
-    df_rem <- df_rem[-id,]
-  }
-  red_dat[[s]] <- df_pr
-  print(name)
+df_pr <- tmp_full_dat[0,]
+df_rem <- tmp_full_dat
+
+#remove variables that have only one unique value
+tmp_df <- tmp_full_dat %>% 
+  dplyr::select(any_of(v_list)) %>%
+  dplyr::select(where(~ length(unique(.)) != 1))
+
+mal_dis <- mahalanobis.dist(tmp_df)
+
+# Select the two points that are furthest apart based on this distance and add to df_pr
+# (if plural pairs are present one pair is selected randomly)
+id <- which(mal_dis == max(mal_dis), arr.ind = TRUE)
+pnt_coord <- id[sample(nrow(id),1,replace=FALSE),]
+df_pr <- rbind(df_pr,df_rem[as.vector(pnt_coord)[1],], df_rem[as.vector(pnt_coord)[2],])
+# Remove this pair from the remaining points
+df_rem <- df_rem[-c(as.vector(pnt_coord)[1],as.vector(pnt_coord)[2]),]
+
+# This loop now selects the point that is furthest away from the current points in df_pr
+# in order to get a total of 75 points
+while (nrow(df_pr) < 400) {
+  mal_dis <- mahalanobis.dist(df_pr[,12:16],df_rem[,12:16])
+  mal_dis_tot <- colSums(mal_dis)
+  id <- as.vector(which(mal_dis_tot == max(mal_dis_tot), useNames = FALSE))
+  if (length(id) > 1) {id <- sample(id,1)}
+  df_pr <- rbind(df_pr,df_rem[id,])
+  df_rem <- df_rem[-id,]
 }
-
-reduced_dat <- bind_rows(red_dat)
-table(reduced_dat$scientificname)
-# Alosa fallax      Clupea harengus Dicentrarchus labrax     Scomber scombrus 
-#          160                  400                  160                  400
-
-table(reduced_dat$scientificname, reduced_dat$Month)
-#                        1   2   3   7   8   9  10  11  12
-# Alosa fallax          32  71   0   4  24   7  15   7   0
-# Clupea harengus       60  98  31  29  85  21  30  32  14
-# Dicentrarchus labrax  15  17  25  10   5  16  50  17   5
-# Scomber scombrus      23  46  18  40 122  37  31  61  22
-
-##3.2 spawning data ----
-### sampling bias: spatial filtering ----
-species_sp <- tibble(scientific = c("Clupea harengus", "Scomber scombrus"),
-                  simple = c("herring", "mackerel"))
-
-#thin towards minimum distance of 10 NM or 18.52 km
-presences_list_sp <- list()
-for (s in 1:nrow(species_sp)) {
-  tmp_df <- full_dat_sp %>% filter(scientificname == species_sp$scientific[s])
-  presences_list_sp[[s]] <- spThin::thin(tmp_df, lat.col = "lat", long.col = "lon", 
-                                      spec.col = "scientificname", thin.par = 18.52, reps = 1,
-                                      write.files = FALSE, locs.thinned.list.return = TRUE)[[1]]
-  names(presences_list_sp)[s] <- species_sp$simple[s]
-  print(s)
-}
-
-mapview(presences_list_sp[[1]]$Longitude, presences_list_sp[[1]]$Latitude, crs = 'epsg:4326')
-
-### sampling bias: environmental filtering ----
-table(full_dat_sp$scientificname)
-# Clupea harengus Scomber scombrus 
-#            5242             6020 
-
-red_dat_sp <- list()
-for (s in 1:nrow(species_sp)) {
-  name <- species_sp$simple[s]
-  
-  tmp_full_dat <- left_join(presences_list_sp[[which(names(presences_list_sp) == species_sp$simple[s])]] %>% 
-                              mutate(lon = Longitude, lat = Latitude), full_dat_sp, by = c("lon","lat")) %>%
-    filter(scientificname == species_sp$scientific[s])
-  
-  df_pr <- tmp_full_dat[0,]
-  df_rem <- tmp_full_dat
-  
-  #remove variables that have only one unique value
-  tmp_df <- tmp_full_dat %>% 
-    select(any_of(v_list)) %>%
-    select(where(~ length(unique(.)) != 1))
-  
-  mal_dis <- mahalanobis.dist(tmp_df)
-  
-  # Select the two points that are furthest apart based on this distance and add to df_pr
-  # (if plural pairs are present one pair is selected randomly)
-  id <- which(mal_dis == max(mal_dis), arr.ind = TRUE)
-  pnt_coord <- id[sample(nrow(id),1,replace=FALSE),]
-  df_pr <- rbind(df_pr,df_rem[as.vector(pnt_coord)[1],], df_rem[as.vector(pnt_coord)[2],])
-  # Remove this pair from the remaining points
-  df_rem <- df_rem[-c(as.vector(pnt_coord)[1],as.vector(pnt_coord)[2]),]
-  
-  # This loop now selects the point that is furthest away from the current points in df_pr
-  # in order to get a total of 75 points
-  while (nrow(df_pr) < 400) {
-    mal_dis <- mahalanobis.dist(df_pr[,12:16],df_rem[,12:16])
-    mal_dis_tot <- colSums(mal_dis)
-    id <- as.vector(which(mal_dis_tot == max(mal_dis_tot), useNames = FALSE))
-    if (length(id) > 1) {id <- sample(id,1)}
-    df_pr <- rbind(df_pr,df_rem[id,])
-    df_rem <- df_rem[-id,]
-  }
-  red_dat_sp[[s]] <- df_pr
-  print(name)
-}
-
-reduced_dat_sp <- red_dat_sp[[1]]
-
+reduced_dat_sp <- df_pr
 
 table(reduced_dat_sp$Month)
 #                    1   2   3   4   5   6   7   9  10  12
@@ -542,11 +316,10 @@ table(reduced_dat_sp$Month)
 
 #4. Save data ----
 # stack list, mask and ICES areas shapefile
-save(st_list_NEA_cl,
-     final_common_mask, ices_shp,  
-     file = "SAVE/final_st_list.Rdata")
+# save(st_list_NEA_cl,
+#      final_common_mask, ices_shp,  
+#      file = "SAVE/final_st_list.Rdata")
 
 # biological data before and after environmental filtering
-save(presences_list_sp, presences_list, file = "SAVE/presences_after_spatial_filtering.Rdata")
-save(full_dat, reduced_dat, file = "SAVE/bio_dat_adults.Rdata")
-save(full_dat_sp, reduced_dat_sp, file = "SAVE/bio_dat_larvae.Rdata")
+# save(presences_list, file = "SAVE/presences_after_spatial_filtering.Rdata")
+# save(full_dat_sp, reduced_dat_sp, file = "SAVE/bio_dat_larvae.Rdata")

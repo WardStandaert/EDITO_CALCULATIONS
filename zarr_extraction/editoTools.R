@@ -152,7 +152,7 @@ retryJson<-function(url){
 }
 
 #uses terra::rast
-getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo)
+getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory=F)
 { 
   
   dsn=toGDAL(zinfo$href)
@@ -198,8 +198,31 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo)
   
   parTabel=dplyr::tibble()
   
-  try({parTabel=terra::extract(x = r, y = dplyr::select(coords,x,y), ID= F, xy=T) }, silent=T)
-  
+
+ try({
+ 
+   
+    if(isCategory)
+    {
+    dbl("using buffer to look up category data")
+    
+    bufferSize=10000
+    bufferedY = terra::buffer(vect(cbind(coords$x, coords$y), crs="+proj=longlat"), bufferSize)
+
+    #get the mean value asme for max, min
+    #parTabel= terra::extract(x=r, y=bufferedY, mean, na.rm=T)
+    #parTabel=cbind(dplyr::select(coords,x,y), parTabel)
+
+    #or for category data
+    par2= terra::extract(x=r, y=bufferedY, table , na.rm=T)
+    parTabel=cbind(as.numeric(colnames(par2)[max.col(par2)]), dplyr::select(coords,x,y))
+    }
+   else
+     parTabel=terra::extract(x = r, y = dplyr::select(coords,x,y), ID= F, xy=T) 
+   
+
+  }, silent=T)
+
  
   cn=c('','_x','_y')
   
@@ -273,7 +296,7 @@ getTimeSeriesFromZarr<-function(usePar, coords, from=NULL, till=NULL, zinfo){
 getLastInfoFromZarr<-function(href,ori=NULL)
 {
   
-  
+
   #info from zarr file specified in href
   meta=jsonlite::fromJSON(gdal_utils('mdiminfo', toGDAL(href), quiet = T))
   
@@ -361,7 +384,7 @@ getLastInfoFromZarr<-function(href,ori=NULL)
   
   zi$meta=meta
   zi$href=href
-  
+    
   return(zi )
   
 }
@@ -485,7 +508,7 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
             if("Bathymetry" %in% colnames(pts)) atDepth= mean(pts$Bathymetry * -1, na.rm=T)
             if(is.na(atDepth)) atDepth=0
             if(atDepth >0 ) atDepth=0-atDepth
-            tble=getParFromZarrwInfo(usePar, coords = dplyr::select(thistble, x=Longitude,y=Latitude) , atTime = periods[p] , atDepth = atDepth, zinfo = zinfo )
+            tble=getParFromZarrwInfo(usePar, coords = dplyr::select(thistble, x=Longitude,y=Latitude) , atTime = periods[p] , atDepth = atDepth, zinfo = zinfo, isCategory =  (!dslist$categories[1] %in% c(NA,0)) )
             # veryvery slow, moved to sandbox
             # tble=getMultipleTimeSeriesFromZarr(usePar,coords = dplyr::select(thistble, x=Longitude,y=Latitude), from=periods[p], till=periods[p], zinfo=zinfo )
         }  

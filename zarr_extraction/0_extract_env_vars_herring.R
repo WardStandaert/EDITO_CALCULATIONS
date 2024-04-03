@@ -1,5 +1,5 @@
 # Prepare data extraction ----
-setwd("~/work/EDITO_CALCULATIONS/zarr_extraction/")
+setwd("C:/Users/ward.standaert/Documents/GitHub/EDITO_CALCULATIONS/zarr_extraction/")
 
 # load functions, but also cached stac catalog named stacCatalog
 source("editoTools.R")
