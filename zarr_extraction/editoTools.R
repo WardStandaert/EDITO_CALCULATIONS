@@ -154,6 +154,8 @@ retryJson<-function(url){
 #uses terra::rast
 getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory=F)
 { 
+  param = usePar[[1]]
+  params = usePar
   
   dsn=toGDAL(zinfo$href)
   
@@ -161,8 +163,8 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
   
   
   #check if parameter is available in zarr file
-  if(usePar %in% names(zinfo$meta$arrays)) 
-    sdsn=sprintf('%s:/%s',dsn,usePar)
+  if(param %in% names(zinfo$meta$arrays)) 
+    sdsn=sprintf('%s:/%s',dsn,param)
   
   closest_time=NULL
   #is there a time component
@@ -189,6 +191,8 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
   }
   
   r=rast(sdsn)
+  if(isCategory)  r=flip(r, "vertical")
+
   if(crs(r)==""){
     
     dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
@@ -201,27 +205,25 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
 
  try({
  
-   
-    if(isCategory)
-    {
-    dbl("using buffer to look up category data")
-    
-    bufferSize=10000
-    bufferedY = terra::buffer(vect(cbind(coords$x, coords$y), crs="+proj=longlat"), bufferSize)
-
-    #get the mean value asme for max, min
-    #parTabel= terra::extract(x=r, y=bufferedY, mean, na.rm=T)
-    #parTabel=cbind(dplyr::select(coords,x,y), parTabel)
-
-    #or for category data
-    par2= terra::extract(x=r, y=bufferedY, table , na.rm=T)
-    parTabel=cbind(as.numeric(colnames(par2)[max.col(par2)]), dplyr::select(coords,x,y))
-    }
-   else
+   #simple lookup if there is no buffer and function provided
+   if(length(params) == 1) {
      parTabel=terra::extract(x = r, y = dplyr::select(coords,x,y), ID= F, xy=T) 
-   
-
-  }, silent=T)
+   } else {
+       dbl("using buffer to look up data")
+       
+       bufferSize = as.numeric(params[["buffer"]])
+       fun = params[["fun"]]
+       bufferedY = terra::buffer(vect(cbind(coords$x, coords$y), crs="+proj=longlat"), bufferSize)
+       
+       if(isCategory) {
+         par2 = terra::extract(x=r, y=bufferedY, table , na.rm=T)
+         parTabel = cbind(as.numeric(colnames(par2)[max.col(par2)]), dplyr::select(coords,x,y))
+       } else {
+         parTabel = cbind(terra::extract(x=r, y=bufferedY, fun, na.rm=T, ID= F),
+                          dplyr::select(coords,x,y))
+       }
+   }
+ }, silent=T)
 
  
   cn=c('','_x','_y')
@@ -237,7 +239,7 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
       parTabel$DataTime = zinfo$times[closest_time]
       cn=c(cn,'_t')
     }  
-    colnames(parTabel)<-c(sprintf("%s%s",usePar,cn))
+    colnames(parTabel)<-c(sprintf("%s%s",param,cn))
   }
   return(parTabel)
 }
@@ -245,13 +247,15 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
 #uses rarr::read_array
 getTimeSeriesFromZarr<-function(usePar, coords, from=NULL, till=NULL, zinfo){
   
+  param = usePar[[1]]
+  params = usePar
   
   buoyposlat =  (coords$y[1] - zinfo$latmin) / zinfo$latstep
   buoyposlon =  (coords$x[1] - zinfo$lonmin) / zinfo$lonstep
   endpoint = paste0("https://", str_extract(zinfo$href, "(?<=//)[^\\s/:]+"))
   
   ilist=list( buoyposlat   , buoyposlon)
-  if( zinfo$meta$arrays[[usePar]]$dimensions[2] =='/elevation' ) # read last level, normally sea surface
+  if( zinfo$meta$arrays[[param]]$dimensions[2] =='/elevation' ) # read last level, normally sea surface
   {
     levels=length(zinfo$levels)
     ilist=append(levels,ilist)
@@ -267,25 +271,25 @@ getTimeSeriesFromZarr<-function(usePar, coords, from=NULL, till=NULL, zinfo){
   } 
   
   sc=1
-  if(!is.null(zinfo$meta$arrays[[usePar]]$scale)) sc=zinfo$meta$arrays[[usePar]]$scale
+  if(!is.null(zinfo$meta$arrays[[param]]$scale)) sc=zinfo$meta$arrays[[param]]$scale
   offs=0
-  if(!is.null(zinfo$meta$arrays[[usePar]]$offset )) offs=zinfo$meta$arrays[[usePar]]$offset 
+  if(!is.null(zinfo$meta$arrays[[param]]$offset )) offs=zinfo$meta$arrays[[param]]$offset 
   
   parValues=NULL
   parTable=tibble()
   try({ 
-    parValues=read_zarr_array(sprintf("%s/%s", zinfo$href, usePar ), index= ilist, s3_client = s3_client(endpoint)) *sc   + offs
+    parValues=read_zarr_array(sprintf("%s/%s", zinfo$href, param ), index= ilist, s3_client = s3_client(endpoint)) *sc   + offs
   })      
   
   if(!is.null(zinfo$timeunit) )
   {
     if(is.null(nrow(parValues))) parValues=rep(NA,length(times))
     parTable= dplyr::tibble("Time" = times, par = parValues)
-    colnames(parTable)<-c('Time', usePar)
+    colnames(parTable)<-c('Time', param)
   }
   else
   { parTable=dplyr::tibble(par=parValues)
-  colnames(parTable)<-c(usePar)
+  colnames(parTable)<-c(param)
   }
   
   return(parTable)
@@ -395,6 +399,9 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
 {
   if(is.null(dslist)) return()
   
+  param = usePar[[1]]
+  params = usePar
+  
   registerDoParallel(cores=16)
   mcoptions=list(preschedule=F, silent=F)
   dbl("workers:",getDoParWorkers())
@@ -468,7 +475,7 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
 
   
   lookup=c("Time","Longitude","Latitude","loop","method")
-  names(lookup)=c(sprintf("vb_%s_t", usePar),sprintf("vb_%s_x", usePar),sprintf("vb_%s_y",usePar),sprintf("vb_%s_l",usePar),sprintf("vb_%s_m",usePar))
+  names(lookup)=c(sprintf("vb_%s_t", param),sprintf("vb_%s_x", param),sprintf("vb_%s_y",param),sprintf("vb_%s_l",param),sprintf("vb_%s_m",param))
   
   dbl(length(periods), " time periods" , nrow(locs)," unique points zarr=", dsng )
   
@@ -477,11 +484,11 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
     resulting= foreach(p=1:nrow(locs),.options.multicore=mcoptions, .combine='CombineR', .packages = c("terra","stars","magrittr","dplyr","Rarr")) %dopar% 
       { 
         
-        tble=getTimeSeriesFromZarr(usePar, tibble('x'= locs$Longitude[p],'y'=locs$Latitude[p]), from=locs$from[p], till=locs$till[p], zinfo=zinfo )
+        tble=getTimeSeriesFromZarr(param, tibble('x'= locs$Longitude[p],'y'=locs$Latitude[p]), from=locs$from[p], till=locs$till[p], zinfo=zinfo )
         
         thistble=dplyr::filter(pts, Latitude==locs$Latitude[p],Longitude==locs$Longitude[p] ) %>% dplyr::select(Time=Period,Latitude,Longitude)
         if("Time" %in% colnames(tble)) tble=dplyr::left_join(thistble, tble, by="Time" ) 
-        else if(nrow(tble)==1) {v=tble[[usePar]][1]; thistble[[usePar]]=v; tble=thistble }
+        else if(nrow(tble)==1) {v=tble[[param]][1]; thistble[[param]]=v; tble=thistble }
         else tble=bind_cols(thistble,tble)
         tble$loop=p
         tble$method="ts"
@@ -508,14 +515,14 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
             if("Bathymetry" %in% colnames(pts)) atDepth= mean(pts$Bathymetry * -1, na.rm=T)
             if(is.na(atDepth)) atDepth=0
             if(atDepth >0 ) atDepth=0-atDepth
-            tble=getParFromZarrwInfo(usePar, coords = dplyr::select(thistble, x=Longitude,y=Latitude) , atTime = periods[p] , atDepth = atDepth, zinfo = zinfo, isCategory =  (!dslist$categories[1] %in% c(NA,0)) )
+            tble=getParFromZarrwInfo(params, coords = dplyr::select(thistble, x=Longitude,y=Latitude) , atTime = periods[p] , atDepth = atDepth, zinfo = zinfo, isCategory =  (!dslist$categories[1] %in% c(NA,0)) )
             # veryvery slow, moved to sandbox
-            # tble=getMultipleTimeSeriesFromZarr(usePar,coords = dplyr::select(thistble, x=Longitude,y=Latitude), from=periods[p], till=periods[p], zinfo=zinfo )
+            # tble=getMultipleTimeSeriesFromZarr(params,coords = dplyr::select(thistble, x=Longitude,y=Latitude), from=periods[p], till=periods[p], zinfo=zinfo )
         }  
         
         
         #this prevents cbind errors when row counts don't match
-        if(nrow(tble) != nrow(thistble) ) { tble = tibble( "par" = rep(NA , nrow(thistble)  ) ) ; colnames(tble)<-c(usePar) }
+        if(nrow(tble) != nrow(thistble) ) { tble = tibble( "par" = rep(NA , nrow(thistble)  ) ) ; colnames(tble)<-c(param) }
         rm(thistble)
         tble$loop=p
         tble$method="rast"
@@ -530,15 +537,15 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
   
 
   
-  dbl("par:", usePar, "records: ", nrow(resulting))
-  newpiece=list(usePar=list("href"= dsng, "par"=usePar,"nr"= nrow(resulting),"points"=nrow(locs),"periods"=length(periods),"stacinfo"= dplyr::slice(dslist,1),"zarrmeta"=zinfo$meta ,"progress"=loglist ) )
-  names(newpiece)=c(usePar)
+  dbl("par:", param, "records: ", nrow(resulting))
+  newpiece=list(usePar=list("href"= dsng, "par"=param,"nr"= nrow(resulting),"points"=nrow(locs),"periods"=length(periods),"stacinfo"= dplyr::slice(dslist,1),"zarrmeta"=zinfo$meta ,"progress"=loglist ) )
+  names(newpiece)=c(param)
  
   #for category data, add the description found in the zarr meta data
   if(!dslist$categories[1] %in% c(NA,0))
   {
-    catdesc=zinfo$meta$attributes[[usePar]]
-    resulting[[paste0(usePar,"_Description")]]=ifelse(resulting[[usePar]] %in% catdesc,  names(catdesc[resulting[[usePar]]]) ,'NA')
+    catdesc=zinfo$meta$attributes[[param]]
+    resulting[[paste0(param,"_Description")]]=ifelse(resulting[[param]] %in% catdesc,  names(catdesc[resulting[[param]]]) ,'NA')
   }
   
   resulting <- resulting %>% dplyr::select( -any_of(c("Period","Slice","diff") ))
@@ -551,7 +558,7 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
 
 enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCatalogue, verbose="")
 {
-  
+
   #we need to group the sampling points to reduce the data lookups
   #rounding to 3 deg decimals for lat/lon ot minutes for time is a very crude approximation
   #better is to use a snap to grid approach based on the spatiotemporal resolution of the parameter  
@@ -575,7 +582,9 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
   
   for(currentPar in 1:length(requestedParameters))
   { 
-    parameter=requestedParameters[currentPar]
+    parameter=requestedParameters[[currentPar]]
+    
+    param = ifelse(length(parameter)==1, parameter, parameter[[1]])
     
     
     dbl()
@@ -584,17 +593,17 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     #check available zarr assets in the stack catalogue for the region and period in the data file
     #order by resolution and take the first record
     
-    dslist=dplyr::filter(stacCatalogue, par==parameter &  latmin < min(pts$Latitude) & latmax > max(pts$Latitude) & lonmin < min(pts$Longitude) & lonmax > max(pts$Longitude) & chunktype %in% c('timeChunked','geoChunked','chunked')) 
+    dslist=dplyr::filter(stacCatalogue, par==param & latmin < min(pts$Latitude) & latmax > max(pts$Latitude) & lonmin < min(pts$Longitude) & lonmax > max(pts$Longitude) & chunktype %in% c('timeChunked','geoChunked','chunked')) 
     
 
     if(! "Time" %in% colnames(pts))
       dslist=dplyr::filter(dslist,timestep %in% c(NA,0))
     
     if(nrow(dslist)==0) {
-      if(parameter %in% stacCatalogue$par)
+      if(param %in% stacCatalogue$par)
         dbl("no data assets fit the criteria ")
       else
-        dbl("requested parameter ", parameter, " not found")
+        dbl("requested parameter ", param, " not found")
       next
     }
     

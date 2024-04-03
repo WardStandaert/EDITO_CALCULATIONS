@@ -1,5 +1,5 @@
 # Prepare data extraction ----
-setwd("C:/Users/ward.standaert/Documents/GitHub/EDITO_CALCULATIONS/zarr_extraction/")
+setwd("/home/onyxia/work/EDITO_CALCULATIONS/zarr_extraction/")
 
 # load functions, but also cached stac catalog named stacCatalog
 source("editoTools.R")
@@ -31,27 +31,33 @@ timeSteps=c(2629746000)
 nms <- names(pts %>% select(-"...1",-X, -pa, -lon, -lat, -Longitude, -Latitude, -Year, -Month, -Time))
 nms
 
-parameters <- c("thetao", "so", "zooc", "phyc", "Energy", "Substrate", "elevation")
-
+parameters = list("elevation" = c("par" = "elevation", 
+                                  "fun" = "mean", 
+                                  "buffer" = "10000"), 
+                  "thetao", "so", "zooc", "phyc", "Energy")
 
 #check if they all exist
 for ( parameter in parameters) {
-  if(! parameter %in% unique(EDITOSTAC$par) ) 
-    { dbl("Unknown parameter ", parameter)
+  param = ifelse(length(parameter) == 1, parameter, parameter["par"])
+  if(! param %in% unique(EDITOSTAC$par) ) 
+    { dbl("Unknown parameter ", param)
   }
 }
 
 # Extract data ----
 #add verbose= anything to get additional info on the positions ( par_x, par_y, par_z ) and time (par_t) found in the zarr files
-enhanced_DF=enhanceDF(inputPoints = pts, 
-                      requestedParameters = parameters, 
-                      requestedTimeSteps = timeSteps, 
-                      stacCatalogue = EDITOSTAC, 
-                      verbose="on")
+pts2 <- pts %>% arrange(desc(Latitude))
+
+enhanced_DF = enhanceDF(inputPoints = pts,
+                         requestedParameters = parameters, 
+                         requestedTimeSteps = timeSteps, 
+                         stacCatalogue = EDITOSTAC, 
+                         verbose="on")
 
 glimpse(enhanced_DF)
-glimpse(enhanced_DF %>% select(all_of(c(nms,parameters)[order(c(nms,parameters))])))
 
+enhanced_DF <- left_join(enhanced_DF, pts, by = c("Longitude","Latitude"))
+enhanced_DF <- enhanced_DF %>% na.omit()
 # Check difference in time  ----
 
 enhanced_DF$Time - enhanced_DF$thetao_t
@@ -178,14 +184,14 @@ substr_lvl <- tibble(sub_char = c("Fine mud", "Sand", "Muddy sand", "Mixed sedim
 energy_lvl <- tibble(ene_char = c("High energy", "Moderate energy", "Low energy", "No energy information"),
                      seabed_energy = c(1:4))
 
-enhanced_DF <- enhanced_DF %>%
+enhanced_DF2 <- enhanced_DF2 %>%
   left_join(substr_lvl, by = c("seabed_substrate")) %>%
   left_join(energy_lvl, by = c("seabed_energy")) 
 
-glimpse(enhanced_DF)
+glimpse(enhanced_DF2)
 
-sum(enhanced_DF$Energy_Description == enhanced_DF$ene_char) / length(enhanced_DF$Energy_Description)
-sum(enhanced_DF$Substrate_Description == enhanced_DF$sub_char) / length(enhanced_DF$Substrate_Description)
+sum(enhanced_DF2$Energy_Description == enhanced_DF2$ene_char) / length(enhanced_DF2$Energy_Description)
+sum(enhanced_DF2$Substrate_Description == enhanced_DF2$sub_char) / length(enhanced_DF2$Substrate_Description)
 
 par(mfrow = c(1,2))
 plot(enhanced_DF$Energy, enhanced_DF$seabed_energy)

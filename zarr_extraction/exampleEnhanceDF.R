@@ -1,3 +1,5 @@
+setwd("/home/onyxia/work/EDITO_CALCULATIONS/zarr_extraction/")
+
 # load functions, but also cached stac catalog named stacCatalog
 source("editoTools.R")
 options("outputdebug"=c('L','M'))
