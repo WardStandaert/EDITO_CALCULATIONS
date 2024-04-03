@@ -34,7 +34,21 @@ nms
 parameters = list("elevation" = c("par" = "elevation", 
                                   "fun" = "mean", 
                                   "buffer" = "10000"), 
-                  "thetao", "so", "zooc", "phyc", "Energy")
+                  "thetao"= c("par" = "thetao", 
+                              "fun" = "mean", 
+                              "buffer" = "10000"), 
+                  "so"= c("par" = "so", 
+                          "fun" = "mean", 
+                          "buffer" = "10000"),
+                  "zooc"= c("par" = "zooc", 
+                            "fun" = "mean", 
+                            "buffer" = "10000")
+                  , "phyc"= c("par" = "phyc", 
+                              "fun" = "mean", 
+                              "buffer" = "10000")
+                  , "Energy"= c("par" = "Energy", 
+                                "fun" = "mean", 
+                                "buffer" = "10000"))
 
 #check if they all exist
 for ( parameter in parameters) {
@@ -56,8 +70,6 @@ enhanced_DF = enhanceDF(inputPoints = pts,
 
 glimpse(enhanced_DF)
 
-enhanced_DF <- left_join(enhanced_DF, pts, by = c("Longitude","Latitude"))
-enhanced_DF <- enhanced_DF %>% na.omit()
 # Check difference in time  ----
 
 enhanced_DF$Time - enhanced_DF$thetao_t
@@ -160,20 +172,20 @@ hist(enhanced_DF$Energy_dist)
 ## Numerical variables ----
 par(mfrow = c(3,2))
 plot(enhanced_DF$SST, enhanced_DF$thetao, cex.lab=1.3,
-     xlim = c(min(enhanced_DF$SST, enhanced_DF$thetao), max(enhanced_DF$SST, enhanced_DF$thetao)),
-     ylim = c(min(enhanced_DF$SST, enhanced_DF$thetao), max(enhanced_DF$SST, enhanced_DF$thetao)))
+     xlim = c(min(enhanced_DF$SST, enhanced_DF$thetao, na.rm = T), max(enhanced_DF$SST, enhanced_DF$thetao, na.rm = T)),
+     ylim = c(min(enhanced_DF$SST, enhanced_DF$thetao, na.rm = T), max(enhanced_DF$SST, enhanced_DF$thetao, na.rm = T)))
 plot(enhanced_DF$SSS, enhanced_DF$so, cex.lab=1.3,
-     xlim = c(min(enhanced_DF$SSS, enhanced_DF$so), max(enhanced_DF$SSS, enhanced_DF$so)),
-     ylim = c(min(enhanced_DF$SSS, enhanced_DF$so), max(enhanced_DF$SSS, enhanced_DF$so)))
+     xlim = c(min(enhanced_DF$SSS, enhanced_DF$so, na.rm = T), max(enhanced_DF$SSS, enhanced_DF$so, na.rm = T)),
+     ylim = c(min(enhanced_DF$SSS, enhanced_DF$so, na.rm = T), max(enhanced_DF$SSS, enhanced_DF$so, na.rm = T)))
 plot(enhanced_DF$Phyto, enhanced_DF$phyc, cex.lab=1.3,
-     xlim = c(min(enhanced_DF$Phyto, enhanced_DF$phyc), max(enhanced_DF$Phyto, enhanced_DF$phyc)),
-     ylim = c(min(enhanced_DF$Phyto, enhanced_DF$phyc), max(enhanced_DF$Phyto, enhanced_DF$phyc)))
+     xlim = c(min(enhanced_DF$Phyto, enhanced_DF$phyc, na.rm = T), max(enhanced_DF$Phyto, enhanced_DF$phyc, na.rm = T)),
+     ylim = c(min(enhanced_DF$Phyto, enhanced_DF$phyc, na.rm = T), max(enhanced_DF$Phyto, enhanced_DF$phyc, na.rm = T)))
 plot(enhanced_DF$ZooPl, enhanced_DF$zooc, cex.lab=1.3,
-     xlim = c(min(enhanced_DF$ZooPl, enhanced_DF$zooc), max(enhanced_DF$ZooPl, enhanced_DF$zooc)),
-     ylim = c(min(enhanced_DF$ZooPl, enhanced_DF$zooc), max(enhanced_DF$ZooPl, enhanced_DF$zooc)))
+     xlim = c(min(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T), max(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T)),
+     ylim = c(min(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T), max(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T)))
 plot(enhanced_DF$depth, enhanced_DF$elevation, cex.lab=1.3,
-     xlim = c(min(enhanced_DF$depth, enhanced_DF$elevation), max(enhanced_DF$depth, enhanced_DF$elevation)),
-     ylim = c(min(enhanced_DF$depth, enhanced_DF$elevation), max(enhanced_DF$depth, enhanced_DF$elevation)))
+     xlim = c(min(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T), max(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T)),
+     ylim = c(min(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T), max(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T)))
 
 ## Categorical variables ----
 substr_lvl <- tibble(sub_char = c("Fine mud", "Sand", "Muddy sand", "Mixed sediment",
@@ -181,17 +193,20 @@ substr_lvl <- tibble(sub_char = c("Fine mud", "Sand", "Muddy sand", "Mixed sedim
                                   "Rock or other hard substrata","Sandy mud", "Sandy mud or Muddy sand ",
                                   "Sediment","Fine mud or Sandy mud or Muddy sand"),
                      seabed_substrate = c(1:12))
-energy_lvl <- tibble(ene_char = c("High energy", "Moderate energy", "Low energy", "No energy information"),
+energy_lvl <- tibble(ene_char_old = c("High energy", "Moderate energy", "Low energy", "No energy information"),
                      seabed_energy = c(1:4))
 
-enhanced_DF2 <- enhanced_DF2 %>%
+energy_lvl2 <- tibble(ene_char_edito = c("None","High energy","Low energy","Moderate energy","No energy information"),
+                     seabed_energy = c(1:5))
+enhanced_DF <- enhanced_DF %>%
   left_join(substr_lvl, by = c("seabed_substrate")) %>%
-  left_join(energy_lvl, by = c("seabed_energy")) 
+  left_join(energy_lvl, by = c("seabed_energy")) %>%
+  left_join(energy_lvl2, by = c("seabed_energy"))
 
-glimpse(enhanced_DF2)
+glimpse(enhanced_DF)
 
-sum(enhanced_DF2$Energy_Description == enhanced_DF2$ene_char) / length(enhanced_DF2$Energy_Description)
-sum(enhanced_DF2$Substrate_Description == enhanced_DF2$sub_char) / length(enhanced_DF2$Substrate_Description)
+sum(enhanced_DF$Energy_Description == enhanced_DF$ene_char) / length(enhanced_DF$Energy_Description)
+sum(enhanced_DF$Substrate_Description == enhanced_DF$sub_char) / length(enhanced_DF$Substrate_Description)
 
 par(mfrow = c(1,2))
 plot(enhanced_DF$Energy, enhanced_DF$seabed_energy)
@@ -208,13 +223,10 @@ enhanced_DF %>%
   select(-n.x, -n.y)
 
 enhanced_DF %>%
-  group_by(Energy_Description) %>% 
-  count() %>% 
-  full_join(enhanced_DF %>%
-              group_by(ene_char) %>% 
-              count(), by = c("Energy_Description" = "ene_char")) %>%
-  mutate(old_extraction = n.y,
-         EDITO_extraction = n.x) %>%
-  select(-n.x, -n.y)
+  group_by(ene_char_old) %>% 
+  count() 
+enhanced_DF %>%
+  group_by(ene_char_edito) %>% 
+  count()
 
 write.csv(enhanced_DF, "tst/extract_test.csv")
