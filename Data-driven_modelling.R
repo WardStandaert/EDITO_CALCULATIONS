@@ -6,49 +6,69 @@ pckgs <- c("raster","sp","proj4","ncdf4","car","mgcv","dismo","rJava","ENMeval",
 pckgs[which(lapply(pckgs, require, character.only = TRUE) == FALSE)]
 rm(pckgs)
 
-setwd("/home/onyxia/work/marbcubes/")
+setwd("/home/onyxia/work/EDITO_CALCULATIONS/")
 #1. Read & organize data -----
-df_fish <- read.csv("data/raw_data/bcube_fcomm.csv")
-df_fish <- df_fish %>%
-  dplyr::mutate(Longitude = as.numeric(map_chr(str_split(cellCode, "_"),2)),
-                Latitude = as.numeric(map_chr(str_split(cellCode, "_"),1)),
-                year = as.numeric(map_chr(str_split(yearMonth, "-"),1)),
-                month = as.numeric(map_chr(str_split(yearMonth, "-"),2)),
-                Time = as.POSIXct(paste(1, month, year, sep = "-"), format = "%d-%m-%Y")) %>%
-  dplyr::filter(year >= 2010 & year <= 2020)
 
-glimpse(df_fish)
+# load functions, but also cached stac catalog named stacCatalog
+source("zarr_extraction/editoTools.R")
+options("outputdebug"=c('L','M'))
 
-mapview(df_fish %>% dplyr::select(Longitude) %>% pull,
-        df_fish %>% dplyr::select(Latitude) %>% pull,
+#the cached stacCatalog is called 'EDITOSTAC'
+load(file = "zarr_extraction/editostacv2.par")
+
+library(arrow)
+
+# the file to process
+
+acf <- S3FileSystem$create(
+  anonymous = T,
+  scheme = "https",
+  endpoint_override = "s3.waw3-1.cloudferro.com"
+)
+
+eurobis <- arrow::open_dataset(acf$path("emodnet/biology/eurobis_occurence_data/eurobisgeoparquet/eurobis_no_partition_sorted.parquet" ))
+df_herring <- eurobis |> 
+  filter(aphiaidaccepted==126417, datasetid==4423,
+         longitude > -12, longitude < 10,
+         latitude > 48, latitude < 62,
+         observationdate >= as.POSIXct("2000-01-01"),
+         observationdate <= as.POSIXct("2020-12-31")) |> 
+  collect() 
+
+glimpse(df_herring)
+
+df_herring <- df_herring %>% 
+  select(Latitude=latitude,
+         Longitude=longitude, 
+         Time=observationdate) %>%
+  mutate(year = year(Time),
+         month = month(Time))
+
+mapview(df_herring %>% dplyr::select(Longitude) %>% pull,
+        df_herring %>% dplyr::select(Latitude) %>% pull,
         crs = "epsg:4326")
 
-#filter out the spatial extent of the fish' native area
-df_fish <- df_fish %>%
-  filter(Longitude >= 30,
-         Longitude <= 160,
-         Latitude >= -35,
-         Latitude <= 32) %>%
-  mutate(species = "cornetfish")
+table(df_herring$month)
 
-mapview(df_fish %>% dplyr::select(Longitude) %>% pull,
-        df_fish %>% dplyr::select(Latitude) %>% pull,
-        crs = "epsg:4326")
+# remove outliers
+# df_herring2 <- CoordinateCleaner::cc_outl(x = as.data.frame(df_herring), lon = "lon", lat = "lat", 
+#                                        method = "quantile", mltpl = 1.5, verbose = TRUE)
 
-table(df_fish$month)
+#Removed 0 records.
 
 #2. Remove duplicates ----
-df_fish <- df_fish %>%
+nrow(df_herring)
+df_herring <- df_herring %>%
   distinct(year, month, Longitude, Latitude, .keep_all = TRUE)
-
+nrow(df_herring)
 
 #3. create pseudo-absences ----
 abs <- spatiotemp_pseudoabs(spatial.method = "buffer", temporal.method = "random",
-                            occ.data = fish_df2 %>% mutate(x = Longitude, y = Latitude),
+                            occ.data = df_herring %>% mutate(x = Longitude, y = Latitude),
                             temporal.ext = c("2010-01-01", "2020-12-31"),
                             spatial.buffer = 10000, n.pseudoabs = 1000)
 
-df_p <- df_fish %>% 
+df_p <- df_herring %>% 
   select(Longitude, Latitude, year, month, Time) %>%
   mutate(pa = 1)
 df_a <- abs %>% rename(Longitude = x, Latitude = y) %>%
@@ -58,33 +78,56 @@ df_a <- abs %>% rename(Longitude = x, Latitude = y) %>%
 
 
 #4. Sample environmental variables with biological data ----
-source("src/data-driven_model_fcomm/editoTools.R")
+source("zarr_extraction/editoTools.R")
 options("outputdebug"=c('L','M'))
-
-#the cached stacCatalog is called 'EDITOSTAC'
-load(file = "src/data-driven_model_fcomm/editostacv2.par")
 
 #the requested timestep resolution of the dataset in milliseconds
 #in this case we work with monthly data (1 month = 30.436875*24*3600*1000 = 2629746000 milliseconds)
 timeSteps=c(2629746000)
 
 parameters_pres = list("elevation" = c("par" = "elevation",
+                                       "fun" = "mean",
+                                       "buffer" = "18520"),
+                       "thetao"= c("par" = "thetao",
+                                   "fun" = "mean",
+                                   "buffer" = "18520"),
+                       "so"= c("par" = "so",
+                               "fun" = "mean",
+                               "buffer" = "18520"),
+                       "zooc" = c("par" = "zooc",
                                   "fun" = "mean",
-                                  "buffer" = "10000"),
-                  "thetao"= c("par" = "thetao",
-                              "fun" = "mean",
-                              "buffer" = "10000"),
-                  "so"= c("par" = "so",
-                          "fun" = "mean",
-                          "buffer" = "10000"),
-                  "chl"= c("par" = "chl",
-                              "fun" = "mean",
-                              "buffer" = "10000"))
+                                  "buffer" = "18520"),
+                       "phyc" = c("par" = "phyc",
+                                  "fun" = "mean",
+                                  "buffer" = "18520"),
+                       "Substrate"= c("par" = "Substrate",
+                                      "fun" = "mean",
+                                      "buffer" = "18520"),
+                       "Energy"= c("par" = "Energy",
+                                   "fun" = "mean",
+                                   "buffer" = "18520"))
 
-parameters_abs = list("elevation",
-                       "thetao",
-                       "so",
-                       "chl")
+parameters_abs = list("elevation" = c("par" = "elevation",
+                                      "fun" = "mean",
+                                      "buffer" = "18520"),
+                      "thetao"= c("par" = "thetao",
+                                  "fun" = "mean",
+                                  "buffer" = "18520"),
+                      "so"= c("par" = "so",
+                              "fun" = "mean",
+                              "buffer" = "18520"),
+                      "zooc" = c("par" = "zooc",
+                                 "fun" = "mean",
+                                 "buffer" = "18520"),
+                      "phyc" = c("par" = "phyc",
+                                 "fun" = "mean",
+                                 "buffer" = "18520"),
+                      "Substrate"= c("par" = "Substrate",
+                                     "fun" = "mean",
+                                     "buffer" = "18520"),
+                      "Energy"= c("par" = "Energy",
+                                  "fun" = "mean",
+                                  "buffer" = "18520"))
 
 #check if they all exist
 for ( parameter in parameters_pres) {
@@ -106,10 +149,10 @@ enhanced_DF_pres = enhanceDF(inputPoints = df_p,
 glimpse(enhanced_DF_pres)
 
 enhanced_DF_abs = enhanceDF(inputPoints = df_a,
-                             requestedParameters = parameters_abs,
-                             requestedTimeSteps = timeSteps,
-                             stacCatalogue = EDITOSTAC,
-                             verbose="on")
+                            requestedParameters = parameters_abs,
+                            requestedTimeSteps = timeSteps,
+                            stacCatalogue = EDITOSTAC,
+                            verbose="on")
 
 glimpse(enhanced_DF_abs)
 
@@ -152,7 +195,7 @@ if(all(c("seabed_energy","seabed_substrate") %in% names(pr_predv))) {
     left_join(energy_lvl, by = "seabed_energy") %>%
     left_join(substr_lvl, by = "seabed_substrate") %>%
     dplyr::select(-seabed_energy, -seabed_substrate)
-
+  
   tmp_bg_predv <- bg_predv %>%
     left_join(energy_lvl, by = "seabed_energy") %>%
     left_join(substr_lvl, by = "seabed_substrate") %>%
@@ -207,7 +250,7 @@ if(all(c("seabed_energy","seabed_substrate") %in% names(pr_predv))) {
     left_join(energy_lvl, by = "seabed_energy") %>%
     left_join(substr_lvl, by = "seabed_substrate") %>%
     dplyr::select(-seabed_energy, -seabed_substrate)
-
+  
   Background <- bg_predv %>%
     left_join(energy_lvl, by = "seabed_energy") %>%
     left_join(substr_lvl, by = "seabed_substrate") %>%
@@ -224,29 +267,29 @@ for (i in 1:10) {
   tic(paste("iteration", i))
   #Generate "k" groups:
   k<-4 #division of the data will be 75% Vs 25%
-
+  
   groups_pres<-kfold(Presences,k) #Kfold divide the data, assigning every row to one of the K groups randomly.
   groups_abs<-kfold(Background,k)
-
+  
   #Four groups will be used to generate the model and the rest of the point (one group) will be used to evaluate it:
   EvalBg<-Background[groups_pres==1,]
   TrainBg<-Background[groups_pres!=1,]
-
+  
   EvalPres<-Presences[groups_pres==1,]
   TrainPres<-Presences[groups_pres!=1,]
-
+  
   #get model settings
   eval_res <- eval_res_list_sp
   opt.aicc <- eval.results(eval_res_list_sp) %>% filter(delta.AICc == 0)
   mod <- eval_res@models[[which(names(eval_res@models) == opt.aicc$tune.args)]]
-
+  
   EvalBgRes  <- predict(mod, EvalBg, type = "cloglog")
   EvalPresRes  <- predict(mod, EvalPres, type = "cloglog")
-
+  
   tmp_AUC[[i]]<-evaluate(c(EvalPresRes), c(EvalBgRes))
   umbral_maxent<-threshold( tmp_AUC[[i]])
   tmp_TSS[[i]]<-evaluate(p=c(EvalPresRes), a=c(EvalBgRes), tr=umbral_maxent$spec_sens)
-
+  
   toc()
 }
 
@@ -265,7 +308,7 @@ for (s in 1:1) {
   TPR_maxent_vect[,s]  <- sapply(TSS_maxent,function(x){slot(x,'TPR')})
   TNR_maxent_vect[,s]  <- sapply(TSS_maxent,function(x){slot(x,'TNR')})
   TSS_maxent_vect[,s]  <- TPR_maxent_vect[,s] + TNR_maxent_vect[,s] - 1
-
+  
   colnames(AUC_maxent_vect) <- colnames(TPR_maxent_vect) <-
     colnames(TNR_maxent_vect) <-  colnames(TSS_maxent_vect) <-
     species_name$simple
@@ -381,13 +424,13 @@ for (v in 1:length(names(df_pred))) {
     df_pred_res <- df_pred
     ind_df <- which(names(df_pred_res) == var_name)
     ind_tib <- which(names(tib_all_v) == var_name)
-
+    
     df_pred_res[,ind_df] <- sample(pull(na.omit(tib_all_v[,ind_tib])), nrow(df_pred_res))
-
+    
     #4. make new prediction
     prediction2 <- predict(mod.seq, df_pred_res, se.fit=TRUE, type = "cloglog")
     cor_new_max <- cor(na.omit(prediction1), na.omit(prediction2))
-
+    
     #calculate correlation between the two predictions
     cor_df_max[i, v] <- cor_new_max
   }
@@ -416,11 +459,11 @@ for (m in 1:12) {
     opt.aicc <- eval.results(eval_res_list_sp[[1]]) %>% filter(delta.AICc == 0)
     mod <- eval_res@models[[which(names(eval_res@models) == opt.aicc$tune.args)]]
     plot_st <- st_list_NEA_cl[[y]][[m]]
-
+    
     names(plot_st) <- str_remove_all(names(plot_st), "_\\d{4}_\\d{2}|_\\d{4}_\\d")
     names(plot_st)[which(str_detect(names(plot_st),"seabed_energy"))] <- "ene_char"
     names(plot_st)[which(str_detect(names(plot_st),"seabed_substrate"))] <- "sub_char"
-
+    
     pr_geo_y <- stack(pr_geo_y, predict(plot_st, mod, clamp=T, type="cloglog",
                                         factors = list(ene_char = factor(energy_lvl$seabed_energy,
                                                                          labels = energy_lvl$ene_char,
@@ -430,32 +473,32 @@ for (m in 1:12) {
                                                                          levels = substr_lvl$seabed_substrate))))
     names(pr_geo_y)[y] <- c(2000:2020)[y]
   }
-
+  
   # crop to extent of study area
   pr_geo_y <- crop(pr_geo_y, extent(-12, 10, 48, 62))
-
+  
   # average & coefficient of variation NEA
   av_NEA <- stackApply(pr_geo_y, indices =  rep(1,nlayers(pr_geo_y)), mean, na.rm = T)
   sd_NEA <- stackApply(pr_geo_y, indices =  rep(1,nlayers(pr_geo_y)), sd, na.rm = T)
   uncert_NEA <- sd_NEA/av_NEA*100
-
+  
   writeRaster(av_NEA, paste0("3.MODEL_OUTPUT/LARVAE/RASTERS/larval_herring_average_HSI_", m, ".tif"), overwrite = T)
   writeRaster(sd_NEA, paste0("3.MODEL_OUTPUT/LARVAE/RASTERS/larval_herring_sd_HSI_", m, ".tif"), overwrite = T)
-
-
+  
+  
   if (m == 10) {
     # variability BPNS
     bpns_shp <- st_read("1.DOWNLOAD/shapefiles/BPNS/eez.shp", quiet = TRUE)
-
+    
     pr_geo_y <- crop(pr_geo_y, bpns_shp)
     pr_geo_y <- mask(pr_geo_y, bpns_shp)
-
+    
     df <- values(pr_geo_y) %>%
       as.data.frame() %>%
       na.omit() %>%
       gather(key = year, value = "value") %>%
       mutate(year = str_remove(year,"X"))
-
+    
     ggplot(df) +
       geom_boxplot(aes(year, value)) +
       scale_y_continuous(limits = c(0,1)) +
@@ -468,7 +511,7 @@ for (m in 1:12) {
             axis.title.x = element_text(size=10, face = "bold", colour = "black"),
             axis.title.y = element_text(size=10, face = "bold", colour = "black"),
             legend.text = element_text(size=10, face = "bold", colour = "black"))
-
+    
     ggsave(paste0("3.MODEL_OUTPUT/LARVAE/larvae_yearly_variation_", m,".png"), width = 10, height = 4)
   }
   print(m)
