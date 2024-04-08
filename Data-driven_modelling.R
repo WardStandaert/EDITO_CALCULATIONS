@@ -68,6 +68,9 @@ abs <- spatiotemp_pseudoabs(spatial.method = "buffer", temporal.method = "random
                             temporal.ext = c("2010-01-01", "2020-12-31"),
                             spatial.buffer = 10000, n.pseudoabs = 1000)
 
+save(abs, file = "zarr_extraction/absences_save.Rdata")
+load("zarr_extraction/absences_save.Rdata")
+
 df_p <- df_herring %>% 
   select(Longitude, Latitude, year, month, Time) %>%
   mutate(pa = 1)
@@ -85,9 +88,7 @@ options("outputdebug"=c('L','M'))
 #in this case we work with monthly data (1 month = 30.436875*24*3600*1000 = 2629746000 milliseconds)
 timeSteps=c(2629746000)
 
-parameters_pres = list("elevation" = c("par" = "elevation",
-                                       "fun" = "mean",
-                                       "buffer" = "18520"),
+parameters_pres = list("elevation" = "elevation",
                        "thetao"= c("par" = "thetao",
                                    "fun" = "mean",
                                    "buffer" = "18520"),
@@ -139,6 +140,38 @@ for ( parameter in parameters_pres) {
 
 # Extract data ----
 #add verbose= anything to get additional info on the positions ( par_x, par_y, par_z ) and time (par_t) found in the zarr files
+
+pts <- extract_test
+
+substr_lvl <- data.frame(sub_char = c("Fine mud", "Sand", "Muddy sand", "Mixed sediment",
+                                      "Coarse substrate","Sandy mud or Muddy sand", "Seabed",
+                                      "Rock or other hard substrata","Sandy mud", "Sandy mud or Muddy sand ",
+                                      "Sediment","Fine mud or Sandy mud or Muddy sand"),
+                         seabed_substrate = c(1:12))
+energy_lvl <- data.frame(ene_char = c("High energy", "Moderate energy", "Low energy", "No energy information"),
+                         seabed_energy = c(1:4))
+
+enhanced_DF_tst = enhanceDF(inputPoints = pts,
+                            requestedParameters = parameters_pres,
+                            requestedTimeSteps = timeSteps,
+                            stacCatalogue = EDITOSTAC,
+                            verbose="on")
+
+
+enhanced_DF_tst %>% left_join(energy_lvl, by = "seabed_energy") %>%
+  select(ene_char) %>%
+  table()
+enhanced_DF_tst %>%
+  select(Energy_Description) %>%
+  table()
+
+
+enhanced_DF_tst %>% left_join(substr_lvl, by = "seabed_substrate") %>%
+  select(sub_char) %>%
+  table()
+enhanced_DF_tst %>%
+  select(Substrate_Description) %>%
+  table()
 
 enhanced_DF_pres = enhanceDF(inputPoints = df_p,
                              requestedParameters = parameters_pres,
