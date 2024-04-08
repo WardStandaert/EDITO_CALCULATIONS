@@ -209,16 +209,19 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
    if(length(params) == 1) {
      parTabel=terra::extract(x = r, y = dplyr::select(coords,x,y), ID= F, xy=T) 
    } else {
-       dbl("using buffer to look up data")
-       
+   
        bufferSize = as.numeric(params[["buffer"]])
        fun = params[["fun"]]
        bufferedY = terra::buffer(vect(cbind(coords$x, coords$y), crs="+proj=longlat"), bufferSize)
        
        if(isCategory) {
+         dbl("using most frequent value in buffer to look up categorical data")
+         
          par2 = terra::extract(x=r, y=bufferedY, table , na.rm=T)
          parTabel = cbind(as.numeric(colnames(par2)[max.col(par2)]), dplyr::select(coords,x,y))
        } else {
+         dbl("using buffer to look up data")
+         
          parTabel = cbind(terra::extract(x=r, y=bufferedY, fun, na.rm=T, ID= F),
                           dplyr::select(coords,x,y))
        }
@@ -545,7 +548,7 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
   if(!dslist$categories[1] %in% c(NA,0))
   {
     catdesc=zinfo$meta$attributes[[param]]
-    resulting[[paste0(param,"_Description")]]=ifelse(resulting[[param]] %in% catdesc,  names(catdesc[resulting[[param]]]) ,'NA')
+    resulting[[paste0(param,"_Description")]]=ifelse(resulting[[param]] %in% catdesc,  names(catdesc)[match(resulting[[param]], catdesc)] ,'NA')
   }
   
   resulting <- resulting %>% dplyr::select( -any_of(c("Period","Slice","diff") ))
