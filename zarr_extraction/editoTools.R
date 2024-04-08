@@ -659,5 +659,3 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
   return(inputPoints)
   
 }
-
-
