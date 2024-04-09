@@ -63,12 +63,12 @@ df_herring <- df_herring %>%
 nrow(df_herring)
 
 #3. create pseudo-absences ----
-abs <- spatiotemp_pseudoabs(spatial.method = "buffer", temporal.method = "random",
-                            occ.data = df_herring %>% mutate(x = Longitude, y = Latitude),
-                            temporal.ext = c("2010-01-01", "2020-12-31"),
-                            spatial.buffer = 10000, n.pseudoabs = 1000)
-
-save(abs, file = "zarr_extraction/absences_save.Rdata")
+# abs <- spatiotemp_pseudoabs(spatial.method = "buffer", temporal.method = "random",
+#                             occ.data = df_herring %>% mutate(x = Longitude, y = Latitude),
+#                             temporal.ext = c("2010-01-01", "2020-12-31"),
+#                             spatial.buffer = 10000, n.pseudoabs = 1000)
+# 
+# save(abs, file = "zarr_extraction/absences_save.Rdata")
 load("zarr_extraction/absences_save.Rdata")
 
 df_p <- df_herring %>% 
@@ -88,7 +88,9 @@ options("outputdebug"=c('L','M'))
 #in this case we work with monthly data (1 month = 30.436875*24*3600*1000 = 2629746000 milliseconds)
 timeSteps=c(2629746000)
 
-parameters_pres = list("elevation" = "elevation",
+parameters_pres = list("elevation" = c("par" = "elevation",
+                                       "fun" = "mean",
+                                       "buffer" = "1852"),
                        "thetao"= c("par" = "thetao",
                                    "fun" = "mean",
                                    "buffer" = "18520"),
