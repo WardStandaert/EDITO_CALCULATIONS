@@ -1,3 +1,7 @@
+endpoint <- "https://s3.waw3-1.cloudferro.com/emodnet/emodnet_arco/emodnet_human_activities/energy/EMODnet_HA_Energy_WindFarms_pg_20231124_res0.01.zarr"
+
+glimpse(EDITOSTAC)
+
 # Prepare data extraction ----
 setwd("/home/onyxia/work/EDITO_CALCULATIONS/zarr_extraction/")
 
@@ -12,13 +16,6 @@ load(file = "./data-raw/editostacv2.par")
 # datafile = "./data-raw/herring_test_set.csv"
 datafile = "./data-raw/extract_test.csv"
 pts = read.delim(datafile, sep=",") %>% sample_n(100)
-glimpse(pts)
-
-pts <- pts %>%
-  mutate(Latitude = lat,
-         Longitude = lon,
-         Time = as.POSIXct(paste(1,pts$Month,pts$Year, sep = "-"), format = "%d-%m-%Y"))
-
 glimpse(pts)
 
 #the requested timestep resolution of the dataset in milliseconds
@@ -230,3 +227,45 @@ enhanced_DF %>%
   count()
 
 write.csv(enhanced_DF, "tst/extract_test.csv")
+
+
+
+# Extract raster slice from .zarr ----
+source("zarr_extraction/editoTools.R")
+options("outputdebug"=c('L','M'))
+load(file = "zarr_extraction/editostacv2.par")
+
+#the requested timestep resolution of the dataset in milliseconds
+#in this case we work with monthly data (1 month = 30.436875*24*3600*1000 = 2629746000 milliseconds)
+timeSteps=c(2629746000)
+
+
+r <- getRasterSlice(parameter = "elevation",
+                    lon_min = -13,
+                    lon_max = 10,
+                    lat_min = 40,
+                    lat_max = 60,
+                    requestedTimeSteps = timeSteps,
+                    date = "2020-01-01",
+                    stacCatalogue = EDITOSTAC)
+plot(r)
+
+r2 <- getRasterSlice(parameter = "Energy",
+                     lon_min = -13,
+                     lon_max = 10,
+                     lat_min = 40,
+                     lat_max = 60,
+                     requestedTimeSteps = timeSteps,
+                     date = "2020-01-01",
+                     stacCatalogue = EDITOSTAC)
+plot(r2)
+
+r3 <- getRasterSlice(parameter = "thetao",
+                     lon_min = -13,
+                     lon_max = 10,
+                     lat_min = 40,
+                     lat_max = 60,
+                     requestedTimeSteps = timeSteps,
+                     date = "2020-01-01",
+                     stacCatalogue = EDITOSTAC)
+plot(r3)

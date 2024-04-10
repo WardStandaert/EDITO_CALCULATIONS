@@ -18,6 +18,7 @@ load(file = "zarr_extraction/editostacv2.par")
 
 library(arrow)
 
+
 # the file to process
 
 acf <- S3FileSystem$create(
@@ -87,6 +88,39 @@ options("outputdebug"=c('L','M'))
 #the requested timestep resolution of the dataset in milliseconds
 #in this case we work with monthly data (1 month = 30.436875*24*3600*1000 = 2629746000 milliseconds)
 timeSteps=c(2629746000)
+
+
+r <- getRasterSlice(parameter = "thetao",
+                    lon_min = -13,
+                    lon_max = 10,
+                    lat_min = 40,
+                    lat_max = 60,
+                    requestedTimeSteps = timeSteps,
+                    date = "2020-01-01",
+                    stacCatalogue = EDITOSTAC)
+plot(r)
+
+r2 <- getRasterSlice(parameter = "Energy",
+                    lon_min = -13,
+                    lon_max = 10,
+                    lat_min = 40,
+                    lat_max = 60,
+                    requestedTimeSteps = timeSteps,
+                    date = "2020-01-01",
+                    stacCatalogue = EDITOSTAC)
+plot(r2)
+
+r3 <- getRasterSlice(parameter = "thetao",
+                    lon_min = -13,
+                    lon_max = 10,
+                    lat_min = 40,
+                    lat_max = 60,
+                    requestedTimeSteps = timeSteps,
+                    date = "2020-01-01",
+                    stacCatalogue = EDITOSTAC)
+plot(r3)
+
+
 
 parameters_pres = list("elevation" = c("par" = "elevation",
                                        "fun" = "mean",

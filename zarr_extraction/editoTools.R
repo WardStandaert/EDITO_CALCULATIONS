@@ -191,6 +191,7 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
   }
   
   r=rast(sdsn)
+  
   if(isCategory)  r=flip(r, "vertical")
 
   if(crs(r)==""){
@@ -198,6 +199,7 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
     dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
     crs(r)='epsg:4326'
     ext(r)=c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1])
+    r=terra::rast(r, win = c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1]))
   }
   
   parTabel=dplyr::tibble()
@@ -658,4 +660,127 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
   
   return(inputPoints)
   
+}
+
+
+getRasterSlice <- function(parameter, lon_min, lon_max, lat_min, lat_max, requestedTimeSteps = NULL, date, atDepth = NULL, stacCatalogue) {
+  
+  if(is.null(atDepth)) atDepth=0
+  
+  date <- as.POSIXct(date, format = "%Y-%m-%d")
+  
+  if(is.na(date))  dbl("failed to recognise date format, please use format %Y-%m-%d")
+  
+  optimalChunking=c('geoChunked','chunked')
+  dslist=dplyr::filter(stacCatalogue, par==parameter & latmin < lat_min & latmax > lat_max & lonmin < lon_min & lonmax > lon_max & chunktype %in% c('timeChunked','geoChunked','chunked')) 
+  
+  # if a prefered timestep specified, use it
+  if(! is.null(requestedTimeSteps))
+  {
+    tlist=dplyr::filter(dslist, timestep %in% requestedTimeSteps)
+    if(nrow(tlist)>0) dslist=tlist
+  }
+  
+  # geochunked, timechunked or just chunked, to be optimized in future versions
+  if(! is.null(optimalChunking))
+  {
+    tlist=dplyr::filter(dslist, asset %in% optimalChunking)
+    if(nrow(tlist)>0) dslist=tlist
+  }
+  
+  if(! dslist$timestep[1] %in% c(NA,0) ) {
+    
+    tslist=dplyr::filter(dslist,start_datetime <= date & end_datetime >= date)
+    
+    if(nrow(tslist)>1) dslist=tslist
+    
+    dslist=dplyr::arrange(dslist,asset,timestep,latstep)
+    
+    step=dslist$timestep[1]
+    if(step==900000 ) units='15 mins'
+    else if(step== 1800000 ) units='30 mins'
+    else if(step== 3600000 ) units='hours'
+    else if(step== 10800000 ) units='3 hours'
+    else if(step== 21600000 ) units='6 hours'
+    else if(step== 86400000) units='days'
+    else if(step== 604800000) units='weeks'
+    else units='months' # most are defined as specific iso timestep ... extract should be changed
+    
+    Period=lubridate::round_date(date,units)
+    #difference between consecutive times.. needed to group in slices
+    
+    
+    dbl("ds timestep=", step, "rounded to ", units)
+    
+  }  else   {
+    #parameter has no timeresolution eg bathymetry
+    #use most recent value.. could be a different choice
+    
+    dslist=dplyr::filter(dslist, end_datetime == max(end_datetime) )
+    Period=round.POSIXt(dslist$end_datetime[1] )
+    dslist=dplyr::arrange(dslist,latstep)
+  }
+  
+  zinfo=getLastInfoFromZarr(dslist$href[1], dslist$ori[1])
+  
+  dsn=toGDAL(zinfo$href)
+  
+  #check if parameter is available in zarr file
+  if(parameter %in% names(zinfo$meta$arrays)) 
+    sdsn=sprintf('%s:/%s',dsn,parameter)
+  
+  closest_time=NULL
+  #is there a time component
+  if('time' %in% zinfo$meta$dimensions$name & !is.null(zinfo$times))
+  {
+    if(length(zinfo$times) > 1)
+    {  
+      closest_time=closest(zinfo$times,date)
+      
+      sdsn=sprintf('%s:%s',sdsn,max(closest_time-1,1))
+    }
+  }
+  
+  #is the data in several depth or elevation levels
+  closest_level=NULL
+  if('elevation' %in% zinfo$meta$dimensions$name & !is.null(zinfo$levels) )
+  { 
+    if(length(zinfo$levels) > 1)
+    {
+      closest_level=closest(zinfo$levels,atDepth)
+      sdsn=sprintf('%s:%s',sdsn,max(closest_level-1,1) )
+      closest_level = zinfo$levels[closest_level]
+    }
+  }
+  
+  if(!is.null(zinfo$meta$attributes$Field)) {if(zinfo$meta$attributes$Field == "Seabed Habitats") {
+    r=rast(sdsn)
+    
+    r <- flip(r, direction="vertical")
+    
+    dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
+    crs(r)='epsg:4326'
+    ext(r)=c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1])
+    
+    r <- crop(r, ext(lon_min, lon_max, lat_min, lat_max))
+  }} else if (zinfo$meta$attributes$comment == "CMEMS product") {
+    r=rast(sdsn, 
+           win=ext(c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1])),
+           snap = "in")
+
+    dbl("assuming epsg:4326, extent from stac catalogue")
+    crs(r) <- 'epsg:4326'
+    
+    terra::window(r) <- ext(lon_min, lon_max, lat_min, lat_max)
+
+  } else if (parameter == "elevation") {
+    r=rast(sdsn)
+    dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
+    crs(r)='epsg:4326'
+    ext(r)=c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1])
+    
+    r <- crop(r, ext(lon_min, lon_max, lat_min, lat_max))
+  }
+  
+  return(r)
 }
