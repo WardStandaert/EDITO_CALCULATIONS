@@ -199,7 +199,6 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
     dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
     crs(r)='epsg:4326'
     ext(r)=c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1])
-    r=terra::rast(r, win = c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1]))
   }
   
   parTabel=dplyr::tibble()

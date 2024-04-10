@@ -77,6 +77,7 @@ enhanced_DF$Time - enhanced_DF$phyc_t
 # Check difference in space  ----
 library(geosphere)
 
+
 enhanced_DF$thetao_dist <- apply(enhanced_DF, 1, function(row) {
   # Convert elements to numeric
   lon <- as.numeric(row["lon"])
@@ -269,3 +270,36 @@ r3 <- getRasterSlice(parameter = "thetao",
                      date = "2020-01-01",
                      stacCatalogue = EDITOSTAC)
 plot(r3)
+ 
+# Reproduce substrate error ----
+source("zarr_extraction/editoTools.R")
+options("outputdebug"=c('L','M'))
+load(file = "zarr_extraction/editostacv2.par")
+
+datafile = "zarr_extraction/data-raw/extract_test.csv"
+pts = read.delim(datafile, sep=",") %>% sample_n(100)
+glimpse(pts)
+
+#the requested timestep resolution of the dataset in milliseconds
+#in this case we work with monthly data (1 month = 30.436875*24*3600*1000 = 2629746000 milliseconds)
+timeSteps=c(2629746000)
+
+parameters = list("Energy"= c("par" = "Energy", 
+                                "fun" = "mean", 
+                                "buffer" = "10000"))
+
+enhanced_DF = enhanceDF(inputPoints = pts,
+                        requestedParameters = parameters, 
+                        requestedTimeSteps = timeSteps, 
+                        stacCatalogue = EDITOSTAC, 
+                        verbose="on")
+
+endpoint <- "https://s3.waw3-1.cloudferro.com/emodnet/emodnet_arco/emodnet_seabed_habitats/emodnet_broad_scale_seabed_habitat_map_for_europe_euseamap/EUSeaMap_2023_EUSeaMap_2023_res0.01.zarr"
+
+dsn=toGDAL(endpoint)
+r=rast(dsn)
+
+crs(r)='epsg:4326'
+ext(r)=c(-36,22.9333,42.9996,82.964)
+
+plot(r)
