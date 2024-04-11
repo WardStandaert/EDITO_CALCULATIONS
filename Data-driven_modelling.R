@@ -1,26 +1,32 @@
+#install and load packages
 pckgs <- c("raster","sp","proj4","ncdf4","car","mgcv","dismo","rJava","ENMeval",
            "boot","gstat","mgcv", "ggplot2", "tidyr", "dynamicSDM", "stringr", 
            "mapdata", "base","tidync", "sf", "mapview", "tictoc", "ape", "spdep", 
            "spThin", "StatMatch", "CoordinateCleaner", "maxnet", "rasterVis",
-           "tibble", "purrr", "tidyverse")
-pckgs[which(lapply(pckgs, require, character.only = TRUE) == FALSE)]
+           "tibble", "purrr", "tidyverse", "arrow")
+
+installed_packages <- pckgs %in% rownames(installed.packages())
+
+if (any(installed_packages == FALSE)) {
+  install.packages(pckgs[!installed_packages])
+}
+
+invisible(lapply(pckgs, library, character.only = TRUE))
 rm(pckgs)
 
+#Rarr package needs separate install
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("Rarr")
+library("Rarr")
+
+##########  PART 1 - train model  ########## 
+
 setwd("/home/onyxia/work/EDITO_CALCULATIONS/")
-#1. Read & organize data -----
-
-# load functions, but also cached stac catalog named stacCatalog
-source("zarr_extraction/editoTools.R")
-options("outputdebug"=c('L','M'))
-
-#the cached stacCatalog is called 'EDITOSTAC'
-load(file = "zarr_extraction/editostacv2.par")
-
-library(arrow)
-
+#1. Collect & organize data -----
 
 # the file to process
-
 acf <- S3FileSystem$create(
   anonymous = T,
   scheme = "https",
@@ -28,7 +34,7 @@ acf <- S3FileSystem$create(
 )
 
 eurobis <- arrow::open_dataset(acf$path("emodnet/biology/eurobis_occurence_data/eurobisgeoparquet/eurobis_no_partition_sorted.parquet" ))
-df_herring <- eurobis |> 
+df_occs <- eurobis |> 
   filter(aphiaidaccepted==126417, datasetid==4423,
          longitude > -12, longitude < 10,
          latitude > 48, latitude < 62,
@@ -36,156 +42,131 @@ df_herring <- eurobis |>
          observationdate <= as.POSIXct("2020-12-31")) |> 
   collect() 
 
-glimpse(df_herring)
+glimpse(df_occs)
 
-df_herring <- df_herring %>% 
+df_occs <- df_occs %>% 
   select(Latitude=latitude,
          Longitude=longitude, 
          Time=observationdate) %>%
   mutate(year = year(Time),
          month = month(Time))
 
-mapview(df_herring %>% dplyr::select(Longitude) %>% pull,
-        df_herring %>% dplyr::select(Latitude) %>% pull,
+mapview(df_occs %>% dplyr::select(Longitude) %>% pull,
+        df_occs %>% dplyr::select(Latitude) %>% pull,
         crs = "epsg:4326")
 
-table(df_herring$month)
+table(df_occs$month)
 
 # remove outliers
-# df_herring2 <- CoordinateCleaner::cc_outl(x = as.data.frame(df_herring), lon = "lon", lat = "lat", 
+# df_occs2 <- CoordinateCleaner::cc_outl(x = as.data.frame(df_occs), lon = "lon", lat = "lat", 
 #                                        method = "quantile", mltpl = 1.5, verbose = TRUE)
 
 #Removed 0 records.
 
-#2. Remove duplicates ----
-nrow(df_herring)
-df_herring <- df_herring %>%
-  distinct(year, month, Longitude, Latitude, .keep_all = TRUE)
-nrow(df_herring)
 
-#3. create pseudo-absences ----
+#2. Remove duplicates ----
+nrow(df_occs)
+# 7902
+df_occs <- df_occs %>%
+  distinct(year, month, Longitude, Latitude, .keep_all = TRUE)
+nrow(df_occs)
+# 5347
+# so we removed 2555 duplicated records
+
+
+#3. Reduce sampling bias ----
+# Thin towards distance of 10 NM or 18.52 km
+# This is the distance between valid hauls in ICES trawl surveys
+
+df_occs_thinned <- df_occs[0,] %>% select(-Time)
+for (y in 1:length(2000:2020)) {
+  for (m in 1:length(1:12)) {
+    tmp_df <- df_occs %>% filter(year == c(2000:2020)[y],
+                                    month == m)
+    tmp_df_thinned <- spThin::thin(tmp_df %>% mutate(species = "Atlantic herring"),
+                                   lat.col = "Latitude", long.col = "Longitude",
+                                   spec.col = "species", thin.par = 18.52, reps = 1,
+                                   write.files = FALSE, locs.thinned.list.return = TRUE,
+                                   verbose = FALSE)[[1]]
+    
+    tmp_df_thinned <- tmp_df_thinned %>%
+      mutate(year = c(2000:2020)[y],
+             month = m)
+    
+    df_occs_thinned <- rbind(df_occs_thinned, tmp_df_thinned)
+  }
+  print(paste0(c(2000:2020)[y], " done"))
+}
+
+
+nrow(df_occs_thinned)
+# 3995
+
+mapview(df_occs_thinned %>% dplyr::select(Longitude) %>% pull,
+        df_occs_thinned %>% dplyr::select(Latitude) %>% pull,
+        crs = "epsg:4326")
+
+# save(df_occs_thinned, file = "data/df_thinned.Rdata")
+load("data/df_thinned.Rdata")
+
+#4. Sample environmental variables at occurrences ----
+source("zarr_extraction/editoTools.R")
+options("outputdebug"=c('L','M'))
+load(file = "zarr_extraction/editostacv2.par")
+
+#the requested timestep resolution of the dataset in milliseconds
+#in this case we work with monthly data (1 month = 30.436875*24*3600*1000 = 2629746000 milliseconds)
+timeSteps=c(2629746000)
+
+##TODO: ADD ELEVATION, WINDFARMS AND SEABED SUBSTRATE ENERGY ------
+parameters = list("thetao" = c("par" = "thetao", "fun" = "mean", "buffer" = "18520"),
+                  "so" = c("par" = "so", "fun" = "mean", "buffer" = "18520"),
+                  "zooc" = c("par" = "zooc", "fun" = "mean", "buffer" = "18520"),
+                  "phyc" = c("par" = "phyc", "fun" = "mean", "buffer" = "18520"))
+
+#check if they are all available in the data lake
+for (parameter in parameters) {
+  param = ifelse(length(parameter) == 1, parameter, parameter["par"])
+  if(! param %in% unique(EDITOSTAC$par)) dbl("Unknown parameter ", param)
+}
+
+#extract function
+df_occs_env = enhanceDF(inputPoints = df_occs_thinned %>% 
+                          mutate(Time = as.POSIXct(paste(year,month,1,sep = "-"))),
+                        requestedParameters = parameters,
+                        requestedTimeSteps = timeSteps,
+                        stacCatalogue = EDITOSTAC,
+                        verbose="on")
+
+glimpse(df_occs_env)
+
+df_occs_env <- df_occs_env %>% select(Longitude, Latitude, year, month,
+                                      thetao, so, zooc, phyc)
+
+#5. create pseudo-absences and sample them ----
 # abs <- spatiotemp_pseudoabs(spatial.method = "buffer", temporal.method = "random",
-#                             occ.data = df_herring %>% mutate(x = Longitude, y = Latitude),
+#                             occ.data = df_occs %>% mutate(x = Longitude, y = Latitude),
 #                             temporal.ext = c("2010-01-01", "2020-12-31"),
 #                             spatial.buffer = 10000, n.pseudoabs = 1000)
 # 
 # save(abs, file = "zarr_extraction/absences_save.Rdata")
 load("zarr_extraction/absences_save.Rdata")
 
-df_p <- df_herring %>% 
-  select(Longitude, Latitude, year, month, Time) %>%
-  mutate(pa = 1)
 df_a <- abs %>% rename(Longitude = x, Latitude = y) %>%
   mutate(Time = as.POSIXct(paste(year,month,day, sep = "-")),
          pa = 0) %>%
   select(-day)
 
 
-#4. Sample environmental variables with biological data ----
-source("zarr_extraction/editoTools.R")
-options("outputdebug"=c('L','M'))
-
-#the requested timestep resolution of the dataset in milliseconds
-#in this case we work with monthly data (1 month = 30.436875*24*3600*1000 = 2629746000 milliseconds)
-timeSteps=c(2629746000)
-
-
-r <- getRasterSlice(parameter = "thetao",
-                    lon_min = -13,
-                    lon_max = 10,
-                    lat_min = 40,
-                    lat_max = 60,
-                    requestedTimeSteps = timeSteps,
-                    date = "2020-01-01",
-                    stacCatalogue = EDITOSTAC)
-plot(r)
-
-r2 <- getRasterSlice(parameter = "Energy",
-                    lon_min = -13,
-                    lon_max = 10,
-                    lat_min = 40,
-                    lat_max = 60,
-                    requestedTimeSteps = timeSteps,
-                    date = "2020-01-01",
-                    stacCatalogue = EDITOSTAC)
-plot(r2)
-
-r3 <- getRasterSlice(parameter = "thetao",
-                    lon_min = -13,
-                    lon_max = 10,
-                    lat_min = 40,
-                    lat_max = 60,
-                    requestedTimeSteps = timeSteps,
-                    date = "2020-01-01",
-                    stacCatalogue = EDITOSTAC)
-plot(r3)
 
 
 
-parameters_pres = list("elevation" = c("par" = "elevation",
-                                       "fun" = "mean",
-                                       "buffer" = "1852"),
-                       "thetao"= c("par" = "thetao",
-                                   "fun" = "mean",
-                                   "buffer" = "18520"),
-                       "so"= c("par" = "so",
-                               "fun" = "mean",
-                               "buffer" = "18520"),
-                       "zooc" = c("par" = "zooc",
-                                  "fun" = "mean",
-                                  "buffer" = "18520"),
-                       "phyc" = c("par" = "phyc",
-                                  "fun" = "mean",
-                                  "buffer" = "18520"),
-                       "Substrate"= c("par" = "Substrate",
-                                      "fun" = "mean",
-                                      "buffer" = "18520"),
-                       "Energy"= c("par" = "Energy",
-                                   "fun" = "mean",
-                                   "buffer" = "18520"))
 
-parameters_abs = list("elevation" = c("par" = "elevation",
-                                      "fun" = "mean",
-                                      "buffer" = "18520"),
-                      "thetao"= c("par" = "thetao",
-                                  "fun" = "mean",
-                                  "buffer" = "18520"),
-                      "so"= c("par" = "so",
-                              "fun" = "mean",
-                              "buffer" = "18520"),
-                      "zooc" = c("par" = "zooc",
-                                 "fun" = "mean",
-                                 "buffer" = "18520"),
-                      "phyc" = c("par" = "phyc",
-                                 "fun" = "mean",
-                                 "buffer" = "18520"),
-                      "Substrate"= c("par" = "Substrate",
-                                     "fun" = "mean",
-                                     "buffer" = "18520"),
-                      "Energy"= c("par" = "Energy",
-                                  "fun" = "mean",
-                                  "buffer" = "18520"))
-
-#check if they all exist
-for ( parameter in parameters_pres) {
-  param = ifelse(length(parameter) == 1, parameter, parameter["par"])
-  if(! param %in% unique(EDITOSTAC$par) )
-  { dbl("Unknown parameter ", param)
-  }
-}
 
 # Extract data ----
 #add verbose= anything to get additional info on the positions ( par_x, par_y, par_z ) and time (par_t) found in the zarr files
 
 pts <- extract_test
-
-substr_lvl <- data.frame(sub_char = c("Fine mud", "Sand", "Muddy sand", "Mixed sediment",
-                                      "Coarse substrate","Sandy mud or Muddy sand", "Seabed",
-                                      "Rock or other hard substrata","Sandy mud", "Sandy mud or Muddy sand ",
-                                      "Sediment","Fine mud or Sandy mud or Muddy sand"),
-                         seabed_substrate = c(1:12))
-energy_lvl <- data.frame(ene_char = c("High energy", "Moderate energy", "Low energy", "No energy information"),
-                         seabed_energy = c(1:4))
 
 enhanced_DF_tst = enhanceDF(inputPoints = pts,
                             requestedParameters = parameters_pres,
@@ -209,13 +190,6 @@ enhanced_DF_tst %>%
   select(Substrate_Description) %>%
   table()
 
-enhanced_DF_pres = enhanceDF(inputPoints = df_p,
-                             requestedParameters = parameters_pres,
-                             requestedTimeSteps = timeSteps,
-                             stacCatalogue = EDITOSTAC,
-                             verbose="on")
-
-glimpse(enhanced_DF_pres)
 
 enhanced_DF_abs = enhanceDF(inputPoints = df_a,
                             requestedParameters = parameters_abs,
@@ -237,20 +211,6 @@ fish_df2 <- rbind(enhanced_DF_pres %>%
 nrow(fish_df2)
 fish_df2 <- na.omit(fish_df2)
 nrow(fish_df2)
-
-#3. Sampling bias - filtering -----
-
-### sampling bias: spatial filtering ----
-#already thinned to minimum distance of 10 km
-
-
-# Variables selected through literature review
-v_list <- c("SST", "SSS", "chl")
-
-#5. extract environmental values for presence absences ----
-
-
-
 
 #6 ENMeval model creation  ----
 #convert month to character bc algorithm cant handle factors that look like numeric
@@ -518,6 +478,8 @@ var_imp_lv
 sum(var_imp_lv)
 
 write.csv(var_imp_lv, "3.MODEL_OUTPUT/LARVAE/variable_importance.csv")
+
+##########  PART 2 - project model  ########## 
 
 #9. Spatial predictions ----
 for (m in 1:12) {
