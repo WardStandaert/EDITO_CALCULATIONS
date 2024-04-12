@@ -261,7 +261,7 @@ r2 <- getRasterSlice(parameter = "Energy",
                      stacCatalogue = EDITOSTAC)
 plot(r2)
 
-r3 <- getRasterSlice(parameter = "thetao",
+r3 <- getRasterSlice(parameter = "phyc",
                      lon_min = -13,
                      lon_max = 10,
                      lat_min = 40,

@@ -24,7 +24,7 @@ library("Rarr")
 ##########  PART 1 - train model  ########## 
 
 setwd("/home/onyxia/work/EDITO_CALCULATIONS/")
-#1. Collect & organize data -----
+#1. Collect & organize occurrence data -----
 
 # the file to process
 acf <- S3FileSystem$create(
@@ -109,7 +109,34 @@ mapview(df_occs_thinned %>% dplyr::select(Longitude) %>% pull,
 # save(df_occs_thinned, file = "data/df_thinned.Rdata")
 load("data/df_thinned.Rdata")
 
-#4. Sample environmental variables at occurrences ----
+#4. Create background points ----
+# lets take a spatial buffer of 100 km around the occurrence points for this example 
+# 
+# abs <- spatiotemp_pseudoabs(spatial.method = "buffer", temporal.method = "random",
+#                             occ.data = df_occs_thinned %>% mutate(x = Longitude, y = Latitude),
+#                             temporal.ext = c("2000-01-01", "2020-12-31"), spatial.buffer = 100000,
+#                             n.pseudoabs = 10000)
+# 
+# glimpse(abs)
+# 
+# #limit temporal values of background points to months where occurrences of larvae are present
+# set.seed(123)
+# abs <- abs %>%
+#   mutate(month = sample(unique(df_occs_thinned$month), nrow(abs), replace = TRUE)) %>%
+#   mutate(Longitude = x, Latitude = y) %>%
+#   select(-day, -x, -y)
+# glimpse(abs)
+# 
+# save(abs, file = "zarr_extraction/absences_save.Rdata")
+load("zarr_extraction/absences_save.Rdata")
+
+#combine occurrences and background points
+df_occ_bg <- rbind(df_occs_thinned %>% mutate(presence = 1), 
+                   abs %>% mutate(presence = 0))
+glimpse(df_occ_bg)
+
+
+#5. Sample environmental variables at occurrences and background points ----
 source("zarr_extraction/editoTools.R")
 options("outputdebug"=c('L','M'))
 load(file = "zarr_extraction/editostacv2.par")
@@ -130,130 +157,62 @@ for (parameter in parameters) {
   if(! param %in% unique(EDITOSTAC$par)) dbl("Unknown parameter ", param)
 }
 
-#extract function
-df_occs_env = enhanceDF(inputPoints = df_occs_thinned %>% 
+#extract function (requires POSIXct Time column)
+df_occ_bg_env = enhanceDF(inputPoints = df_occ_bg %>% 
                           mutate(Time = as.POSIXct(paste(year,month,1,sep = "-"))),
                         requestedParameters = parameters,
                         requestedTimeSteps = timeSteps,
                         stacCatalogue = EDITOSTAC,
                         verbose="on")
 
-glimpse(df_occs_env)
+glimpse(df_occ_bg_env)
 
-df_occs_env <- df_occs_env %>% select(Longitude, Latitude, year, month,
-                                      thetao, so, zooc, phyc)
+df_occ_bg_env <- df_occ_bg_env %>% select(Longitude, Latitude, year, month,
+                                          thetao, so, zooc, phyc)
 
-#5. create pseudo-absences and sample them ----
-# abs <- spatiotemp_pseudoabs(spatial.method = "buffer", temporal.method = "random",
-#                             occ.data = df_occs %>% mutate(x = Longitude, y = Latitude),
-#                             temporal.ext = c("2010-01-01", "2020-12-31"),
-#                             spatial.buffer = 10000, n.pseudoabs = 1000)
-# 
-# save(abs, file = "zarr_extraction/absences_save.Rdata")
-load("zarr_extraction/absences_save.Rdata")
-
-df_a <- abs %>% rename(Longitude = x, Latitude = y) %>%
-  mutate(Time = as.POSIXct(paste(year,month,day, sep = "-")),
-         pa = 0) %>%
-  select(-day)
-
-
-
-
-
-
-
-# Extract data ----
-#add verbose= anything to get additional info on the positions ( par_x, par_y, par_z ) and time (par_t) found in the zarr files
-
-pts <- extract_test
-
-enhanced_DF_tst = enhanceDF(inputPoints = pts,
-                            requestedParameters = parameters_pres,
-                            requestedTimeSteps = timeSteps,
-                            stacCatalogue = EDITOSTAC,
-                            verbose="on")
-
-
-enhanced_DF_tst %>% left_join(energy_lvl, by = "seabed_energy") %>%
-  select(ene_char) %>%
-  table()
-enhanced_DF_tst %>%
-  select(Energy_Description) %>%
-  table()
-
-
-enhanced_DF_tst %>% left_join(substr_lvl, by = "seabed_substrate") %>%
-  select(sub_char) %>%
-  table()
-enhanced_DF_tst %>%
-  select(Substrate_Description) %>%
-  table()
-
-
-enhanced_DF_abs = enhanceDF(inputPoints = df_a,
-                            requestedParameters = parameters_abs,
-                            requestedTimeSteps = timeSteps,
-                            stacCatalogue = EDITOSTAC,
-                            verbose="on")
-
-glimpse(enhanced_DF_abs)
-
-fish_df2 <- rbind(enhanced_DF_pres %>% 
-                    select(Longitude, Latitude, year, month,
-                           Time, SST = thetao, SSS = so, chl) %>%
-                    mutate(species = "fish", pa = 1),
-                  enhanced_DF_abs %>% 
-                    select(Longitude, Latitude, year, month,
-                           Time, SST = thetao, SSS = so, chl)%>%
-                    mutate(species = "fish", pa = 0))
-
-nrow(fish_df2)
-fish_df2 <- na.omit(fish_df2)
-nrow(fish_df2)
 
 #6 ENMeval model creation  ----
 #convert month to character bc algorithm cant handle factors that look like numeric
 
-eval_res_list_sp <- list()
-tmp_pr_predv <- list()
-tmp_bg_predv <- list()
-
-if(all(c("seabed_energy","seabed_substrate") %in% names(pr_predv))) {
-  tmp_pr_predv <- pr_predv %>%
-    left_join(energy_lvl, by = "seabed_energy") %>%
-    left_join(substr_lvl, by = "seabed_substrate") %>%
-    dplyr::select(-seabed_energy, -seabed_substrate)
-  
-  tmp_bg_predv <- bg_predv %>%
-    left_join(energy_lvl, by = "seabed_energy") %>%
-    left_join(substr_lvl, by = "seabed_substrate") %>%
-    dplyr::select(-seabed_energy, -seabed_substrate)
-  cat <- c("ene_char","sub_char")
-} else {
-  tmp_pr_predv <- pr_predv
-  tmp_bg_predv <- bg_predv
-  cat <- NULL
-}
-
-#if any column exists with only one unique value --> delete it
-if(any(apply(rbind(tmp_pr_predv, tmp_bg_predv), 2, function(x) length(unique(x)) == 1))) {
-  tmp_ind <- which(apply(rbind(tmp_pr_predv, tmp_bg_predv), 2, function(x) length(unique(x)) == 1))
-  tmp_ind_v <- names(tmp_ind)
-  tmp_pr_predv <- tmp_pr_predv[-tmp_ind]
-  tmp_bg_predv <- tmp_bg_predv[-tmp_ind]
-  v_list <- v_list[-which(v_list == tmp_ind_v)]
-  print(paste0("removed ", names(tmp_ind), " as a variable for ", species_name$simple))
-}
-
-tmp_pr_predv <- data.frame(pr_coord %>% dplyr::select(lon, lat), tmp_pr_predv) #input for ENMevaluate requires lon & lat as first covariates
-tmp_bg_predv <- data.frame(bg_coord %>% dplyr::select(lon, lat), tmp_bg_predv) #input for ENMevaluate requires lon & lat as first covariates
+# eval_res_list_sp <- list()
+# tmp_pr_predv <- list()
+# tmp_bg_predv <- list()
+# 
+# if(all(c("seabed_energy","seabed_substrate") %in% names(pr_predv))) {
+#   tmp_pr_predv <- pr_predv %>%
+#     left_join(energy_lvl, by = "seabed_energy") %>%
+#     left_join(substr_lvl, by = "seabed_substrate") %>%
+#     dplyr::select(-seabed_energy, -seabed_substrate)
+#   
+#   tmp_bg_predv <- bg_predv %>%
+#     left_join(energy_lvl, by = "seabed_energy") %>%
+#     left_join(substr_lvl, by = "seabed_substrate") %>%
+#     dplyr::select(-seabed_energy, -seabed_substrate)
+#   cat <- c("ene_char","sub_char")
+# } else {
+#   tmp_pr_predv <- pr_predv
+#   tmp_bg_predv <- bg_predv
+#   cat <- NULL
+# }
+# 
+# #if any column exists with only one unique value --> delete it
+# if(any(apply(rbind(tmp_pr_predv, tmp_bg_predv), 2, function(x) length(unique(x)) == 1))) {
+#   tmp_ind <- which(apply(rbind(tmp_pr_predv, tmp_bg_predv), 2, function(x) length(unique(x)) == 1))
+#   tmp_ind_v <- names(tmp_ind)
+#   tmp_pr_predv <- tmp_pr_predv[-tmp_ind]
+#   tmp_bg_predv <- tmp_bg_predv[-tmp_ind]
+#   v_list <- v_list[-which(v_list == tmp_ind_v)]
+#   print(paste0("removed ", names(tmp_ind), " as a variable for ", species_name$simple))
+# }
+# 
+# tmp_pr_predv <- data.frame(pr_coord %>% dplyr::select(lon, lat), tmp_pr_predv) #input for ENMevaluate requires lon & lat as first covariates
+# tmp_bg_predv <- data.frame(bg_coord %>% dplyr::select(lon, lat), tmp_bg_predv) #input for ENMevaluate requires lon & lat as first covariates
 
 #test different model settings using ENMeval
-eval_res_list_sp <- ENMeval::ENMevaluate(occs = tmp_pr_predv,
-                                         bg = tmp_bg_predv,
+eval_res_list_sp <- ENMeval::ENMevaluate(occs = df_occ_bg_env %>% filter(presence == 1),
+                                         bg = df_occ_bg_env %>% filter(presence == 0),
                                          tune.args = list(fc = c("L","LQ","LQH"),
-                                                          rm = c(1,2,4,8,32)),
+                                                          rm = c(1,2,4,8)),
                                          algorithm = "maxnet",
                                          partitions = "randomkfold",
                                          categoricals = cat,
@@ -382,102 +341,6 @@ sum_all[match(sum_all$species, species_name$simple),]
 #save results
 write.csv(sum_all, "3.MODEL_OUTPUT/LARVAE/validation_metrics.csv")
 
-
-#8. variable importance ----
-
-# make big tibble with all possible values per variable
-# only run once for either adults or larvae
-
-# tib_all_v <- tibble(a = rep(1,3846528)) %>% select()
-# for (v in 1:length(v_list_all)) {
-#   nm <- v_list_all[v]
-#   tmp_x <- NULL
-#   for (y in 1:length(2000:2020)) {
-#     for (m in 1:12) {
-#       tmp_st <-  st_list_NEA_cl[[y]][[m]]
-#       tmp_x <- append(tmp_x, values(tmp_st[[which(str_detect(names(tmp_st), nm))]]))
-#     }
-#   }
-#   tib_all_v <- tib_all_v %>% add_column(tmp_x)
-#   colnames(tib_all_v)[v] <- v_list_all[v]
-#   print(nm)
-# }
-# tib_all_v$Year <- rep(2000:2020, times = 1, each = ncell(st_list_NEA2[[1]][[1]])*12)
-# colnames(tib_all_v)[which(colnames(tib_all_v) %in% c("ene_char", "sub_char"))] <- c("seabed_energy", "seabed_substrate")
-#
-# tib_all_v <- tib_all_v %>%
-#   left_join(substr_lvl %>% mutate(seabed_substrate = as.numeric(seabed_substrate)), by = "seabed_substrate") %>%
-#   left_join(energy_lvl %>% mutate(seabed_energy = as.numeric(seabed_energy)), by = "seabed_energy") %>%
-#   dplyr::select(-seabed_substrate, -seabed_energy)
-#
-#
-# head(tib_all_v)
-#
-# save(tib_all_v, file = "SAVE/tib_all_v.Rdata")
-load("SAVE/tib_all_v.Rdata")
-
-cor_maxnet <- list()
-#1. get best model (based on AICc criterion)
-eval_res <- eval_res_list_sp
-res <- eval.results(eval_res)
-opt.aicc <- res %>% filter(delta.AICc == 0)
-mod.seq <- eval.models(eval_res)[[opt.aicc$tune.args]]
-
-#2. make original prediction
-df_pred <- rbind(pr_predv, bg_predv)
-if(all(c("seabed_energy", "seabed_substrate") %in% names(df_pred))) {
-  df_pred <- df_pred %>%
-    left_join(substr_lvl, by = "seabed_substrate") %>%
-    left_join(energy_lvl, by = "seabed_energy") %>%
-    select(-seabed_substrate, -seabed_energy)
-}
-
-prediction1 <- predict(mod.seq, df_pred,
-                       se.fit=TRUE, type = "cloglog",
-                       factors = list(seabed_energy = factor(energy_lvl$seabed_energy,
-                                                             labels = energy_lvl$seabed_energy,
-                                                             levels = energy_lvl$seabed_energy),
-                                      seabed_substrate = factor(substr_lvl$seabed_substrate,
-                                                                labels = substr_lvl$seabed_substrate,
-                                                                levels = substr_lvl$seabed_substrate)))
-
-#prepare cor matrix
-cor_df_max <- data.frame(matrix(ncol = length(names(df_pred)), nrow= 50))
-colnames(cor_df_max) <- names(df_pred)
-
-for (v in 1:length(names(df_pred))) {
-  #3. resample one variable
-  var_name <- names(df_pred)[v]
-  tic(var_name)
-  for (i in 1:50) {
-    df_pred_res <- df_pred
-    ind_df <- which(names(df_pred_res) == var_name)
-    ind_tib <- which(names(tib_all_v) == var_name)
-    
-    df_pred_res[,ind_df] <- sample(pull(na.omit(tib_all_v[,ind_tib])), nrow(df_pred_res))
-    
-    #4. make new prediction
-    prediction2 <- predict(mod.seq, df_pred_res, se.fit=TRUE, type = "cloglog")
-    cor_new_max <- cor(na.omit(prediction1), na.omit(prediction2))
-    
-    #calculate correlation between the two predictions
-    cor_df_max[i, v] <- cor_new_max
-  }
-  toc()
-}
-#store in list
-cor_maxnet <- sapply(cor_df_max, FUN = function(x) 1-mean(x, na.rm=T))
-
-
-cor_maxnet_sp <- cor_maxnet
-
-#convert to percentages
-var_imp_lv <- cor_maxnet_sp[[1]]
-var_imp_lv <- round(var_imp_lv/sum(var_imp_lv),2)
-var_imp_lv
-sum(var_imp_lv)
-
-write.csv(var_imp_lv, "3.MODEL_OUTPUT/LARVAE/variable_importance.csv")
 
 ##########  PART 2 - project model  ########## 
 
