@@ -3,7 +3,7 @@ pckgs <- c("raster","sp","proj4","ncdf4","car","mgcv","dismo","rJava","ENMeval",
            "boot","gstat","mgcv", "ggplot2", "tidyr", "dynamicSDM", "stringr", 
            "mapdata", "base","tidync", "sf", "mapview", "tictoc", "ape", "spdep", 
            "spThin", "StatMatch", "CoordinateCleaner", "maxnet", "rasterVis",
-           "tibble", "purrr", "tidyverse", "arrow", "tidyverse")
+           "tibble", "purrr", "tidyverse", "arrow", "tidyverse", "gridExtra")
 
 installed_packages <- pckgs %in% rownames(installed.packages())
 
@@ -344,12 +344,60 @@ plot(predictions)
 length(variables)
 vs <- c("depth", "SST", "SSS", "Phyto", "ZooPl", "windfarms", "sub_char", "ene_char")
 
-par(mfrow = c(3,3))
-for (v in vs) {
-  response.plot(mod, v, type = "cloglog", 
-                ylab = "Probability of occurrence",
-                plot = T)
+name_key <- data.frame(old = c("depth", "SST", "SSS", "Phyto", "ZooPl", "windfarms", "sub_char", "ene_char"),
+                       new = c("Depth (m)%", "Sea surface temperature (°C)%", "Sea surface salinity (PSU)%", 
+                               "Phytoplankton concentration%(mmol C / m³)", "Zooplankton concentration%(g C / m²)", 
+                               "Windfarm presence", "Seabed substrate", "Seabed energy"))
+addline_format <- function(x,...){
+  gsub('%','\n',x)
 }
 
+for (i in 1:nrow(name_key)) {
+
+  v <- name_key$old[i]
+  out_name <- name_key$new[i]
+  
+  dat <- response.plot(mod, v, type = "cloglog", 
+                ylab = "Probability of occurrence",
+                plot = F)
+  
+  if(is.character(dat[1,1])) {
+    assign(v, ggplot(dat) +
+      geom_bar(aes_string(x = v, y = "pred"), stat='identity', fill = "#332288") +
+      # scale_x_discrete(limits = rev(substr_key[which(substr_key %in% dat_lv$sub_char)])) +
+      scale_y_continuous(limits = c(0,1)) +
+      coord_flip() +
+      labs(title = out_name, x = "", y = "Probability of presence") +
+      theme_bw() +
+      theme(legend.title = element_blank(),
+            plot.title = element_text(size=10, face = "bold", colour = "black", hjust = 0.5),
+            axis.text.y = element_text(size=10, face = "plain", colour = "black"),
+            axis.text.x = element_text(size=10, face = "plain", colour = "black"),
+            axis.title.x = element_text(size=10, face = "bold", colour = "black"),
+            axis.title.y = element_text(size=10, face = "bold", colour = "black"),
+            legend.text = element_text(size=10, face = "bold", colour = "black")))
+  } else {
+    
+    #define plot bounds (restricted to where occurrences are present)
+    min <- df_occ_bg_env %>% filter(presence == 1) %>% dplyr::select(all_of(v)) %>% min
+    max <- df_occ_bg_env %>% filter(presence == 1) %>% dplyr::select(all_of(v)) %>% max
+    
+    assign(v, ggplot(dat) +
+      geom_line(aes_string(x = v, y = "pred"), linewidth = 1, color = "#332288") + 
+      labs(x = addline_format(out_name), y = "Probability of presence") +
+      scale_x_continuous(limits = c(min, max)) +
+      scale_y_continuous(limits = c(0,1)) +
+      theme_bw() +
+      theme(legend.title = element_text(size=10, face = "bold", colour = "black"),
+            legend.text = element_text(size=10, face = "plain", colour = "black"), 
+            axis.text.y = element_text(size=10, face = "plain", colour = "black"),
+            axis.text.x = element_text(size=10, face = "plain", colour = "black"),
+            axis.title.x = element_text(size=10, face = "bold", colour = "black"),
+            axis.title.y = element_text(size=10, face = "bold", colour = "black")))
+  }
+}
+
+grid.arrange(depth, SST, SSS, Phyto, ZooPl, windfarms, ene_char, sub_char)
 
 #12. Add variable importance? ----
+
