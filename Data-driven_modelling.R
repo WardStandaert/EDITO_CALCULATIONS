@@ -3,7 +3,7 @@ pckgs <- c("raster","sp","proj4","ncdf4","car","mgcv","dismo","rJava","ENMeval",
            "boot","gstat","mgcv", "ggplot2", "tidyr", "dynamicSDM", "stringr", 
            "mapdata", "base","tidync", "sf", "mapview", "tictoc", "ape", "spdep", 
            "spThin", "StatMatch", "CoordinateCleaner", "maxnet", "rasterVis",
-           "tibble", "purrr", "tidyverse", "arrow")
+           "tibble", "purrr", "tidyverse", "arrow", "tidyverse")
 
 installed_packages <- pckgs %in% rownames(installed.packages())
 
@@ -171,7 +171,7 @@ df_occ_bg_env <- df_occ_bg_env %>% select(Longitude, Latitude, year, month,
                                           thetao, so, zooc, phyc)
 
 # save(df_occ_bg_env, file = "zarr_extraction/pres_abs_env_save.Rdata")
-load(file = "zarr_extraction/pres_abs_env_save.Rdata")
+load(file = "pres_abs_env_save.Rdata")
 
 
 # remove observations where no environmental values were present
@@ -197,30 +197,19 @@ energy_lvl <- tibble(ene_char = c("High energy", "Moderate energy", "Low energy"
 df_occ_bg_env <- df_occ_bg_env %>%
   left_join(energy_lvl, by = "seabed_energy") %>%
   left_join(substr_lvl, by = "seabed_substrate") %>%
-  dplyr::select(-seabed_energy, -seabed_substrate)
+  dplyr::select(-seabed_energy, -seabed_substrate) %>%
+  mutate(windfarms = as.factor(windfarms))
 
-
-#if any column exists with only one unique value --> delete it
-if(any(apply(rbind(tmp_pr_predv, tmp_bg_predv), 2, function(x) length(unique(x)) == 1))) {
-  tmp_ind <- which(apply(rbind(tmp_pr_predv, tmp_bg_predv), 2, function(x) length(unique(x)) == 1))
-  tmp_ind_v <- names(tmp_ind)
-  tmp_pr_predv <- tmp_pr_predv[-tmp_ind]
-  tmp_bg_predv <- tmp_bg_predv[-tmp_ind]
-  v_list <- v_list[-which(v_list == tmp_ind_v)]
-  print(paste0("removed ", names(tmp_ind), " as a variable for ", species_name$simple))
-}
 
 # input for ENMevaluate requires lon & lat as first covariates
 
 #test different model settings using ENMeval
-model_fit <- ENMeval::ENMevaluate(occs = df_occ_bg_env %>% 
+model_fit <- ENMeval::ENMevaluate(occs = df_occ_bg_env %>%                                    
                                     filter(presence == 1) %>% 
-                                    select(Longitude, Latitude, depth, Phyto, SSS, SST, windfarms, ZooPl, ene_char, sub_char) %>%
-                                    mutate(windfarms = as.factor(windfarms)),
+                                    dplyr::select(Longitude, Latitude, depth, Phyto, SSS, SST, windfarms, ZooPl, ene_char, sub_char),
                                   bg = df_occ_bg_env %>% 
                                     filter(presence == 0) %>% 
-                                    select(Longitude, Latitude, depth, Phyto, SSS, SST, windfarms, ZooPl, ene_char, sub_char) %>%
-                                    mutate(windfarms = as.factor(windfarms)),
+                                    dplyr::select(Longitude, Latitude, depth, Phyto, SSS, SST, windfarms, ZooPl, ene_char, sub_char),
                                   tune.args = list(fc = c("L","LQ","LQH"),
                                                    rm = c(1,2,4,8,32)),
                                   algorithm = "maxnet",
@@ -234,7 +223,7 @@ model_fit <- ENMeval::ENMevaluate(occs = df_occ_bg_env %>%
 
 print(model_fit %>% eval.results() %>% filter(delta.AICc == 0))
 
-save(model_fit, file = "model_fit_save.Rdata")
+# save(model_fit, file = "model_fit_save.Rdata")
 load("model_fit_save.Rdata")
 
 
@@ -242,24 +231,12 @@ load("model_fit_save.Rdata")
 AUC_maxent <- list()
 TSS_maxent <- list()
 
-Presences <- pr_predv
-Background <- bg_predv
-
-if(all(c("seabed_energy","seabed_substrate") %in% names(pr_predv))) {
-  Presences <- pr_predv %>%
-    left_join(energy_lvl, by = "seabed_energy") %>%
-    left_join(substr_lvl, by = "seabed_substrate") %>%
-    dplyr::select(-seabed_energy, -seabed_substrate)
-  
-  Background <- bg_predv %>%
-    left_join(energy_lvl, by = "seabed_energy") %>%
-    left_join(substr_lvl, by = "seabed_substrate") %>%
-    dplyr::select(-seabed_energy, -seabed_substrate)
-}
-else {
-  Presences <- pr_predv
-  Background <- bg_predv
-}
+Presences <- df_occ_bg_env %>%                                    
+  filter(presence == 1) %>% 
+  dplyr::select(Longitude, Latitude, depth, Phyto, SSS, SST, windfarms, ZooPl, ene_char, sub_char)
+Background <- df_occ_bg_env %>%                                    
+  filter(presence == 0) %>% 
+  dplyr::select(Longitude, Latitude, depth, Phyto, SSS, SST, windfarms, ZooPl, ene_char, sub_char)
 
 tmp_AUC <- list()
 tmp_TSS <- list()
@@ -279,8 +256,8 @@ for (i in 1:10) {
   TrainPres<-Presences[groups_pres!=1,]
   
   #get model settings
-  eval_res <- eval_res_list_sp
-  opt.aicc <- eval.results(eval_res_list_sp) %>% filter(delta.AICc == 0)
+  eval_res <- model_fit
+  opt.aicc <- eval.results(model_fit) %>% filter(delta.AICc == 0)
   mod <- eval_res@models[[which(names(eval_res@models) == opt.aicc$tune.args)]]
   
   EvalBgRes  <- predict(mod, EvalBg, type = "cloglog")
@@ -295,131 +272,84 @@ for (i in 1:10) {
 
 AUC_maxent <- tmp_AUC
 TSS_maxent <- tmp_TSS
-names(AUC_maxent) <- names(TSS_maxent) <- species_name$simple
 
+AUC_maxent_vect  <- sapply(AUC_maxent,function(x){slot(x,'auc')})
+TPR_maxent_vect  <- sapply(TSS_maxent,function(x){slot(x,'TPR')})
+TNR_maxent_vect  <- sapply(TSS_maxent,function(x){slot(x,'TNR')})
+TSS_maxent_vect  <- TPR_maxent_vect + TNR_maxent_vect - 1
 
-AUC_maxent_vect   <- data.frame(matrix(nrow = 10, ncol = 2))
-TPR_maxent_vect   <- data.frame(matrix(nrow = 10, ncol = 2))
-TNR_maxent_vect   <- data.frame(matrix(nrow = 10, ncol = 2))
-TSS_maxent_vect   <- data.frame(matrix(nrow = 10, ncol = 2))
+stat_df <- data.frame(AUC = c(mean(AUC_maxent_vect), sd(AUC_maxent_vect)),
+                      TSS = c(mean(TSS_maxent_vect), sd(TSS_maxent_vect)),
+                      TPR = c(mean(TPR_maxent_vect), sd(TPR_maxent_vect)),
+                      TNR = c(mean(TNR_maxent_vect), sd(TNR_maxent_vect)))
 
-for (s in 1:1) {
-  AUC_maxent_vect[,s]  <- sapply(AUC_maxent,function(x){slot(x,'auc')})
-  TPR_maxent_vect[,s]  <- sapply(TSS_maxent,function(x){slot(x,'TPR')})
-  TNR_maxent_vect[,s]  <- sapply(TSS_maxent,function(x){slot(x,'TNR')})
-  TSS_maxent_vect[,s]  <- TPR_maxent_vect[,s] + TNR_maxent_vect[,s] - 1
+stat_df <- data.frame(statistic = c("AUC", "TSS", "TPR", "TNR"),
+                      mean = c(mean(AUC_maxent_vect), mean(TSS_maxent_vect), mean(TPR_maxent_vect), mean(TNR_maxent_vect)),
+                      sd = c(sd(TSS_maxent_vect), sd(TSS_maxent_vect), sd(TPR_maxent_vect), sd(TNR_maxent_vect)))
   
-  colnames(AUC_maxent_vect) <- colnames(TPR_maxent_vect) <-
-    colnames(TNR_maxent_vect) <-  colnames(TSS_maxent_vect) <-
-    species_name$simple
-}
-
-sum_auc <- AUC_maxent_vect %>%
-  gather(key = "variable",
-         value = "value") %>%
-  dplyr::group_by(variable) %>%
-  dplyr::summarize(mean = mean(value),
-                   sd = sd(value))
-
-sum_tss <- TSS_maxent_vect %>%
-  gather(key = "variable",
-         value = "value") %>%
-  dplyr::group_by(variable) %>%
-  dplyr::summarize(mean = mean(value),
-                   sd = sd(value))
-
-sum_TPR <- TPR_maxent_vect %>%
-  gather(key = "variable",
-         value = "value") %>%
-  dplyr::group_by(variable) %>%
-  dplyr::summarize(mean = mean(value),
-                   sd = sd(value))
-
-sum_TNR <- TNR_maxent_vect %>%
-  gather(key = "variable",
-         value = "value") %>%
-  dplyr::group_by(variable) %>%
-  dplyr::summarize(mean = mean(value),
-                   sd = sd(value))
-
-sum_all <- cbind(sum_auc, sum_tss[,c(2:3)], sum_TPR[,c(2:3)], sum_TNR[,c(2:3)])
-colnames(sum_all) <- c("species",
-                       "av_AUC", "sd_AUC",
-                       "av_TSS", "sd_TSS",
-                       "av_TPR", "sd_TPR",
-                       "av_TNR", "sd_TNR")
-sum_all[match(sum_all$species, species_name$simple),]
-
-#save results
-write.csv(sum_all, "3.MODEL_OUTPUT/LARVAE/validation_metrics.csv")
-
+stat_df
 
 ##########  PART 2 - project model  ########## 
 
-#9. Spatial predictions ----
-for (m in 1:12) {
-  pr_geo_y <- stack()
-  for (y in 1:length(2000:2020)) {
-    #get model
-    eval_res <- eval_res_list_sp[[1]]
-    opt.aicc <- eval.results(eval_res_list_sp[[1]]) %>% filter(delta.AICc == 0)
-    mod <- eval_res@models[[which(names(eval_res@models) == opt.aicc$tune.args)]]
-    plot_st <- st_list_NEA_cl[[y]][[m]]
-    
-    names(plot_st) <- str_remove_all(names(plot_st), "_\\d{4}_\\d{2}|_\\d{4}_\\d")
-    names(plot_st)[which(str_detect(names(plot_st),"seabed_energy"))] <- "ene_char"
-    names(plot_st)[which(str_detect(names(plot_st),"seabed_substrate"))] <- "sub_char"
-    
-    pr_geo_y <- stack(pr_geo_y, predict(plot_st, mod, clamp=T, type="cloglog",
-                                        factors = list(ene_char = factor(energy_lvl$seabed_energy,
-                                                                         labels = energy_lvl$ene_char,
-                                                                         levels = energy_lvl$seabed_energy),
-                                                       sub_char = factor(substr_lvl$seabed_substrate,
-                                                                         labels = substr_lvl$sub_char,
-                                                                         levels = substr_lvl$seabed_substrate))))
-    names(pr_geo_y)[y] <- c(2000:2020)[y]
-  }
+#9. get raster slices to project on ----
+variables <- c("depth", "SST", "SSS", "Phyto",
+               "ZooPl", "windfarms", "seabed_substrate", 
+               "seabed_energy")
+
+files <- tibble(name = list.files("data-raw", pattern = ".tif|.grd", full.names = TRUE),
+                parameter = str_extract(name, pattern = paste0(variables, collapse = "|")),
+                month = str_extract(name, pattern = "\\d{2}|\\d"))
+
+#get model
+eval_res <- model_fit
+opt.aicc <- eval.results(model_fit) %>% filter(delta.AICc == 0)
+mod <- eval_res@models[[which(names(eval_res@models) == opt.aicc$tune.args)]]
+
+#10. Spatial predictions ----
+
+predictions <- stack()
+for (m in unique(df_occ_bg_env$month)) {
   
+  plot_st <- stack(files %>% 
+                     filter(month == m | is.na(month)) %>% 
+                     dplyr::select(name) %>% 
+                     pull())
+  #get model
+  
+  names(plot_st) <- str_extract(names(plot_st), pattern = paste0(variables, collapse = "|"))
+  names(plot_st)[which(names(plot_st) == "seabed_energy")] <- "ene_char"
+  names(plot_st)[which(names(plot_st) == "seabed_substrate")] <- "sub_char"
+  
+  pred_m <- predict(plot_st, mod, clamp=T, type="cloglog",
+                         factors = list(ene_char = factor(energy_lvl$seabed_energy,
+                                                          labels = energy_lvl$ene_char,
+                                                          levels = energy_lvl$seabed_energy),
+                                        sub_char = factor(substr_lvl$seabed_substrate,
+                                                          labels = substr_lvl$sub_char,
+                                                          levels = substr_lvl$seabed_substrate)))
   # crop to extent of study area
-  pr_geo_y <- crop(pr_geo_y, extent(-12, 10, 48, 62))
+  pred_m <- crop(pred_m, extent(-12, 10, 48, 62))
   
-  # average & coefficient of variation NEA
-  av_NEA <- stackApply(pr_geo_y, indices =  rep(1,nlayers(pr_geo_y)), mean, na.rm = T)
-  sd_NEA <- stackApply(pr_geo_y, indices =  rep(1,nlayers(pr_geo_y)), sd, na.rm = T)
-  uncert_NEA <- sd_NEA/av_NEA*100
+  names(pred_m) <- paste0("prediction_", month.abb[m])
+
+  predictions <- stack(predictions, pred_m)
   
-  writeRaster(av_NEA, paste0("3.MODEL_OUTPUT/LARVAE/RASTERS/larval_herring_average_HSI_", m, ".tif"), overwrite = T)
-  writeRaster(sd_NEA, paste0("3.MODEL_OUTPUT/LARVAE/RASTERS/larval_herring_sd_HSI_", m, ".tif"), overwrite = T)
-  
-  
-  if (m == 10) {
-    # variability BPNS
-    bpns_shp <- st_read("1.DOWNLOAD/shapefiles/BPNS/eez.shp", quiet = TRUE)
-    
-    pr_geo_y <- crop(pr_geo_y, bpns_shp)
-    pr_geo_y <- mask(pr_geo_y, bpns_shp)
-    
-    df <- values(pr_geo_y) %>%
-      as.data.frame() %>%
-      na.omit() %>%
-      gather(key = year, value = "value") %>%
-      mutate(year = str_remove(year,"X"))
-    
-    ggplot(df) +
-      geom_boxplot(aes(year, value)) +
-      scale_y_continuous(limits = c(0,1)) +
-      xlab("Year") +
-      ylab("Habitat suitability index") +
-      theme_bw() +
-      theme(legend.title = element_blank(),
-            axis.text.y = element_text(size=10, face = "plain", colour = "black"),
-            axis.text.x = element_text(size=10, face = "plain", colour = "black"),
-            axis.title.x = element_text(size=10, face = "bold", colour = "black"),
-            axis.title.y = element_text(size=10, face = "bold", colour = "black"),
-            legend.text = element_text(size=10, face = "bold", colour = "black"))
-    
-    ggsave(paste0("3.MODEL_OUTPUT/LARVAE/larvae_yearly_variation_", m,".png"), width = 10, height = 4)
-  }
   print(m)
 }
 
+plot(predictions)
+
+
+#11. Response curves ----
+length(variables)
+vs <- c("depth", "SST", "SSS", "Phyto", "ZooPl", "windfarms", "sub_char", "ene_char")
+
+par(mfrow = c(3,3))
+for (v in vs) {
+  response.plot(mod, v, type = "cloglog", 
+                ylab = "Probability of occurrence",
+                plot = T)
+}
+
+
+#12. Add variable importance? ----

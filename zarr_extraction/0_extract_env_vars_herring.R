@@ -28,10 +28,7 @@ timeSteps=c(2629746000)
 nms <- names(pts %>% select(-"...1",-X, -pa, -lon, -lat, -Longitude, -Latitude, -Year, -Month, -Time))
 nms
 
-parameters = list("elevation" = c("par" = "elevation", 
-                                  "fun" = "mean", 
-                                  "buffer" = "10000"), 
-                  "thetao"= c("par" = "thetao", 
+parameters = list("thetao"= c("par" = "thetao", 
                               "fun" = "mean", 
                               "buffer" = "10000"), 
                   "so"= c("par" = "so", 
