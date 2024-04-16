@@ -82,7 +82,7 @@ df_occs_thinned <- df_occs[0,] %>% select(-Time)
 for (y in 1:length(2000:2020)) {
   for (m in 1:length(1:12)) {
     tmp_df <- df_occs %>% filter(year == c(2000:2020)[y],
-                                    month == m)
+                                 month == m)
     tmp_df_thinned <- spThin::thin(tmp_df %>% mutate(species = "Atlantic herring"),
                                    lat.col = "Latitude", long.col = "Longitude",
                                    spec.col = "species", thin.par = 18.52, reps = 1,
@@ -134,7 +134,7 @@ load("zarr_extraction/absences_save.Rdata")
 df_occ_bg <- rbind(df_occs_thinned %>% mutate(presence = 1), 
                    abs %>% mutate(presence = 0))
 glimpse(df_occ_bg)
-
+save(df_occ_bg, file = "zarr_extraction/pres_abs_save.Rdata")
 
 #5. Sample environmental variables at occurrences and background points ----
 source("zarr_extraction/editoTools.R")
@@ -159,74 +159,86 @@ for (parameter in parameters) {
 
 #extract function (requires POSIXct Time column)
 df_occ_bg_env = enhanceDF(inputPoints = df_occ_bg %>% 
-                          mutate(Time = as.POSIXct(paste(year,month,1,sep = "-"))),
-                        requestedParameters = parameters,
-                        requestedTimeSteps = timeSteps,
-                        stacCatalogue = EDITOSTAC,
-                        verbose="on")
+                            mutate(Time = as.POSIXct(paste(year,month,1,sep = "-"))),
+                          requestedParameters = parameters,
+                          requestedTimeSteps = timeSteps,
+                          stacCatalogue = EDITOSTAC,
+                          verbose="on")
 
 glimpse(df_occ_bg_env)
 
 df_occ_bg_env <- df_occ_bg_env %>% select(Longitude, Latitude, year, month,
                                           thetao, so, zooc, phyc)
 
+# save(df_occ_bg_env, file = "zarr_extraction/pres_abs_env_save.Rdata")
+load(file = "zarr_extraction/pres_abs_env_save.Rdata")
+
+
+# remove observations where no environmental values were present
+df_occ_bg_env <- drop_na(df_occ_bg_env)
+table(df_occ_bg_env$presence)
+#    0    1 
+# 7617 3910 
+
 
 #6 ENMeval model creation  ----
-#convert month to character bc algorithm cant handle factors that look like numeric
 
-# eval_res_list_sp <- list()
-# tmp_pr_predv <- list()
-# tmp_bg_predv <- list()
-# 
-# if(all(c("seabed_energy","seabed_substrate") %in% names(pr_predv))) {
-#   tmp_pr_predv <- pr_predv %>%
-#     left_join(energy_lvl, by = "seabed_energy") %>%
-#     left_join(substr_lvl, by = "seabed_substrate") %>%
-#     dplyr::select(-seabed_energy, -seabed_substrate)
-#   
-#   tmp_bg_predv <- bg_predv %>%
-#     left_join(energy_lvl, by = "seabed_energy") %>%
-#     left_join(substr_lvl, by = "seabed_substrate") %>%
-#     dplyr::select(-seabed_energy, -seabed_substrate)
-#   cat <- c("ene_char","sub_char")
-# } else {
-#   tmp_pr_predv <- pr_predv
-#   tmp_bg_predv <- bg_predv
-#   cat <- NULL
-# }
-# 
-# #if any column exists with only one unique value --> delete it
-# if(any(apply(rbind(tmp_pr_predv, tmp_bg_predv), 2, function(x) length(unique(x)) == 1))) {
-#   tmp_ind <- which(apply(rbind(tmp_pr_predv, tmp_bg_predv), 2, function(x) length(unique(x)) == 1))
-#   tmp_ind_v <- names(tmp_ind)
-#   tmp_pr_predv <- tmp_pr_predv[-tmp_ind]
-#   tmp_bg_predv <- tmp_bg_predv[-tmp_ind]
-#   v_list <- v_list[-which(v_list == tmp_ind_v)]
-#   print(paste0("removed ", names(tmp_ind), " as a variable for ", species_name$simple))
-# }
-# 
-# tmp_pr_predv <- data.frame(pr_coord %>% dplyr::select(lon, lat), tmp_pr_predv) #input for ENMevaluate requires lon & lat as first covariates
-# tmp_bg_predv <- data.frame(bg_coord %>% dplyr::select(lon, lat), tmp_bg_predv) #input for ENMevaluate requires lon & lat as first covariates
+glimpse(df_occ_bg_env)
+
+## TODO remove this part ----
+substr_lvl <- tibble(sub_char = c("Fine mud", "Sand", "Muddy sand", "Mixed sediment",
+                                  "Coarse substrate","Sandy mud or Muddy sand", "Seabed",
+                                  "Rock or other hard substrata","Sandy mud", "Sandy mud or Muddy sand ",
+                                  "Sediment","Fine mud or Sandy mud or Muddy sand"),
+                     seabed_substrate = c(1:12))
+energy_lvl <- tibble(ene_char = c("High energy", "Moderate energy", "Low energy", "No energy information"),
+                     seabed_energy = c(1:4))
+
+df_occ_bg_env <- df_occ_bg_env %>%
+  left_join(energy_lvl, by = "seabed_energy") %>%
+  left_join(substr_lvl, by = "seabed_substrate") %>%
+  dplyr::select(-seabed_energy, -seabed_substrate)
+
+
+#if any column exists with only one unique value --> delete it
+if(any(apply(rbind(tmp_pr_predv, tmp_bg_predv), 2, function(x) length(unique(x)) == 1))) {
+  tmp_ind <- which(apply(rbind(tmp_pr_predv, tmp_bg_predv), 2, function(x) length(unique(x)) == 1))
+  tmp_ind_v <- names(tmp_ind)
+  tmp_pr_predv <- tmp_pr_predv[-tmp_ind]
+  tmp_bg_predv <- tmp_bg_predv[-tmp_ind]
+  v_list <- v_list[-which(v_list == tmp_ind_v)]
+  print(paste0("removed ", names(tmp_ind), " as a variable for ", species_name$simple))
+}
+
+# input for ENMevaluate requires lon & lat as first covariates
 
 #test different model settings using ENMeval
-eval_res_list_sp <- ENMeval::ENMevaluate(occs = df_occ_bg_env %>% filter(presence == 1),
-                                         bg = df_occ_bg_env %>% filter(presence == 0),
-                                         tune.args = list(fc = c("L","LQ","LQH"),
-                                                          rm = c(1,2,4,8)),
-                                         algorithm = "maxnet",
-                                         partitions = "randomkfold",
-                                         categoricals = cat,
-                                         doClamp = TRUE,
-                                         parallel = TRUE)
+model_fit <- ENMeval::ENMevaluate(occs = df_occ_bg_env %>% 
+                                    filter(presence == 1) %>% 
+                                    select(Longitude, Latitude, depth, Phyto, SSS, SST, windfarms, ZooPl, ene_char, sub_char) %>%
+                                    mutate(windfarms = as.factor(windfarms)),
+                                  bg = df_occ_bg_env %>% 
+                                    filter(presence == 0) %>% 
+                                    select(Longitude, Latitude, depth, Phyto, SSS, SST, windfarms, ZooPl, ene_char, sub_char) %>%
+                                    mutate(windfarms = as.factor(windfarms)),
+                                  tune.args = list(fc = c("L","LQ","LQH"),
+                                                   rm = c(1,2,4,8,32)),
+                                  algorithm = "maxnet",
+                                  partitions = "randomkfold",
+                                  categoricals = c("sub_char", "ene_char", "windfarms"),
+                                  doClamp = TRUE,
+                                  parallel = TRUE)
 
 
 
-print(eval_res_list_sp %>% eval.results() %>% filter(delta.AICc == 0))
+
+print(model_fit %>% eval.results() %>% filter(delta.AICc == 0))
+
+save(model_fit, file = "model_fit_save.Rdata")
+load("model_fit_save.Rdata")
 
 
 #7 model evaluation AUC & TSS ----
-set.seed(123)
-
 AUC_maxent <- list()
 TSS_maxent <- list()
 
