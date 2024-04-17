@@ -1,7 +1,3 @@
-endpoint <- "https://s3.waw3-1.cloudferro.com/emodnet/emodnet_arco/emodnet_human_activities/energy/EMODnet_HA_Energy_WindFarms_pg_20231124_res0.01.zarr"
-
-glimpse(EDITOSTAC)
-
 # Prepare data extraction ----
 setwd("/home/onyxia/work/EDITO_CALCULATIONS/zarr_extraction/")
 
@@ -24,10 +20,6 @@ timeSteps=c(2629746000)
 
 
 #the requested parameters, names in the stac catalogue table field 'par' .. see unique(stacCatalogue$par) for a list 
-
-nms <- names(pts %>% select(-"...1",-X, -pa, -lon, -lat, -Longitude, -Latitude, -Year, -Month, -Time))
-nms
-
 parameters = list("thetao"= c("par" = "thetao", 
                               "fun" = "mean", 
                               "buffer" = "10000"), 
@@ -54,8 +46,6 @@ for ( parameter in parameters) {
 
 # Extract data ----
 #add verbose= anything to get additional info on the positions ( par_x, par_y, par_z ) and time (par_t) found in the zarr files
-pts2 <- pts %>% arrange(desc(Latitude))
-
 enhanced_DF = enhanceDF(inputPoints = pts,
                          requestedParameters = parameters, 
                          requestedTimeSteps = timeSteps, 
@@ -63,6 +53,23 @@ enhanced_DF = enhanceDF(inputPoints = pts,
                          verbose="on")
 
 glimpse(enhanced_DF)
+
+EDITOSTAC2 <- EDITOSTAC
+EDITOSTAC2$latmin[EDITOSTAC2$catalogue == "CMEMS"] <- EDITOSTAC2$latmin[EDITOSTAC2$catalogue == "CMEMS"] + 90
+EDITOSTAC2$latmax[EDITOSTAC2$catalogue == "CMEMS"] <- EDITOSTAC2$latmax[EDITOSTAC2$catalogue == "CMEMS"] + 90
+
+glimpse(EDITOSTAC %>% dplyr::select(latmin, latmax))
+glimpse(EDITOSTAC2 %>% dplyr::select(latmin, latmax))
+glimpse(EDITOSTAC %>% filter(catalogue == "CMEMS") %>% dplyr::select(latmin, latmax))
+glimpse(EDITOSTAC2 %>% filter(catalogue == "CMEMS") %>% dplyr::select(latmin, latmax))
+
+enhanced_DF2 = enhanceDF(inputPoints = pts,
+                        requestedParameters = parameters, 
+                        requestedTimeSteps = timeSteps, 
+                        stacCatalogue = EDITOSTAC2, 
+                        verbose="on")
+
+glimpse(enhanced_DF2)
 
 # Check difference in time  ----
 
@@ -229,9 +236,9 @@ write.csv(enhanced_DF, "tst/extract_test.csv")
 
 
 # Extract raster slice from .zarr ----
-source("zarr_extraction/editoTools.R")
+source("editoTools.R")
 options("outputdebug"=c('L','M'))
-load(file = "zarr_extraction/editostacv2.par")
+load(file = "editostacv2.par")
 
 #the requested timestep resolution of the dataset in milliseconds
 #in this case we work with monthly data (1 month = 30.436875*24*3600*1000 = 2629746000 milliseconds)
@@ -258,7 +265,33 @@ r2 <- getRasterSlice(parameter = "Energy",
                      stacCatalogue = EDITOSTAC)
 plot(r2)
 
+r1 <- getRasterSlice(parameter = "phyc",
+                     lon_min = 0,
+                     lon_max = 120,
+                     lat_min = 10,
+                     lat_max = 80,
+                     requestedTimeSteps = timeSteps,
+                     date = "2020-01-01",
+                     stacCatalogue = EDITOSTAC)
+plot(r1)
+r2 <- getRasterSlice(parameter = "phyc",
+                     lon_min = -10,
+                     lon_max = 10,
+                     lat_min = 5,
+                     lat_max = 80,
+                     requestedTimeSteps = timeSteps,
+                     date = "2020-01-01",
+                     stacCatalogue = EDITOSTAC)
+plot(r2)
 r3 <- getRasterSlice(parameter = "phyc",
+                     lon_min = -13,
+                     lon_max = 10,
+                     lat_min = 40,
+                     lat_max = 60,
+                     requestedTimeSteps = timeSteps,
+                     date = "2020-01-01",
+                     stacCatalogue = EDITOSTAC)
+r4 <- getRasterSlice(parameter = "phyc",
                      lon_min = -13,
                      lon_max = 10,
                      lat_min = 40,
@@ -268,6 +301,13 @@ r3 <- getRasterSlice(parameter = "phyc",
                      stacCatalogue = EDITOSTAC)
 plot(r3)
  
+unique(EDITOSTAC$catalogue)
+stac2 <- EDITOSTAC %>% filter(catalogue  == "EMODNET")
+glimpse(stac2)
+unique(stac2$timestep)
+
+#find dataset that has multiple depth layers in EMOIDNET
+
 # Reproduce substrate error ----
 source("zarr_extraction/editoTools.R")
 options("outputdebug"=c('L','M'))

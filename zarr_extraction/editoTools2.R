@@ -191,11 +191,10 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
   }
   
   r=rast(sdsn)
-  
+
   if(isCategory)  r=flip(r, "vertical")
 
-  if(crs(r)==""){
-    
+  if(crs(r)=="") {
     dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
     crs(r)='epsg:4326'
     ext(r)=c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1])
@@ -463,10 +462,15 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
   
   dsng=dslist$href[1]
   
-  
   zinfo=getLastInfoFromZarr(dslist$href[1], dslist$ori[1])
   
+  lat_transform = function(x) {x + 90}
   
+  if(dslist$catalogue[1] == "CMEMS") { 
+    zinfo$latmin = lat_transform(zinfo$latmin)
+    zinfo$latmax = lat_transform(zinfo$latmax)
+    } 
+     
 
   if("Time" %in% colnames(pts))
   {
@@ -762,24 +766,50 @@ getRasterSlice <- function(parameter, lon_min, lon_max, lat_min, lat_max, reques
     ext(r)=c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1])
     
     r <- crop(r, ext(lon_min, lon_max, lat_min, lat_max))
-  }} else if (zinfo$meta$attributes$comment[1] == "CMEMS product") {
-    r=rast(sdsn, 
-           win=ext(c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1])),
-           snap = "in")
-
-    dbl("assuming epsg:4326, extent from stac catalogue")
-    crs(r) <- 'epsg:4326'
-    
-    terra::window(r) <- ext(lon_min, lon_max, lat_min, lat_max)
-
-  } else if (parameter == "elevation") {
+  }} else if (parameter == "elevation") {
     r=rast(sdsn)
     dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
     crs(r)='epsg:4326'
     ext(r)=c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1])
     
     r <- crop(r, ext(lon_min, lon_max, lat_min, lat_max))
-  }
+  } else {
+    
+    #temporarily add transformation function for latitudes in CMEMS layers
+    lat_transform = function(x) {x + 90}
+    
+    closest_min_lon_ind = closest(seq(zinfo$lonmin, zinfo$lonmax, by=zinfo$lonstep),lon_min)
+    closest_min_lon = seq(zinfo$lonmin, zinfo$lonmax, by=zinfo$lonstep)[closest_min_lon_ind]
+    closest_max_lon_ind = closest(seq(zinfo$lonmin, zinfo$lonmax, by=zinfo$lonstep),lon_max)
+    closest_max_lon = seq(zinfo$lonmin, zinfo$lonmax, by=zinfo$lonstep)[closest_max_lon_ind]
+    
+    closest_min_lat_ind = closest(seq(lat_transform(zinfo$latmin), lat_transform(zinfo$latmax), 
+                                  by=zinfo$latstep),lat_min)
+    closest_min_lat = seq(lat_transform(zinfo$latmin), lat_transform(zinfo$latmax), by=zinfo$latstep)[closest_min_lat_ind]
+    closest_max_lat_ind = closest(seq(lat_transform(zinfo$latmin), lat_transform(zinfo$latmax), by=zinfo$latstep),
+                                  lat_max)
+    closest_max_lat = seq(lat_transform(zinfo$latmin), lat_transform(zinfo$latmax), by=zinfo$latstep)[closest_max_lat_ind]
+    
+    r=rast(sdsn)
+    
+    vals <- r[closest_min_lat_ind:closest_max_lat_ind,
+              closest_min_lon_ind:closest_max_lon_ind,
+              1]
+    vals <- c(vals[[1]])
+    
+    dim(vals) <- c(length(seq(closest_min_lon, closest_max_lon, by=zinfo$lonstep)),
+                   length(seq(closest_min_lat, closest_max_lat, by=zinfo$latstep)))
+
+    r2 <- rast(t(vals))
+    ext(r2) <- c(closest_min_lon, closest_max_lon, 
+                 closest_min_lat, closest_max_lat)
+    
+    dbl("assuming epsg:4326, extent from stac catalogue")
+    crs(r2) <- 'epsg:4326'
+    
+    r <- r2
+    
+  } 
   
   return(r)
 }
