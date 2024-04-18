@@ -1,4 +1,4 @@
-# Prepare data extraction ----
+# 1. Prepare data extraction ----
 setwd("/home/onyxia/work/EDITO_CALCULATIONS/zarr_extraction/")
 
 # load functions, but also cached stac catalog named stacCatalog
@@ -10,9 +10,12 @@ load(file = "./data-raw/editostacv2.par")
 
 # the file to process
 # datafile = "./data-raw/herring_test_set.csv"
-datafile = "./data-raw/extract_test.csv"
+datafile = "./herring_zarr_extraction_test_output.csv"
 pts = read.delim(datafile, sep=",") %>% sample_n(100)
 glimpse(pts)
+
+pts <- pts %>%
+  dplyr::select(Longitude, Latitude, Year, Month, Time, SST, SSS, windfarms, ZooPl, Phyto, seabed_energy, seabed_substrate, depth)
 
 #the requested timestep resolution of the dataset in milliseconds
 #in this case we work with monthly data (1 month = 30.436875*24*3600*1000 = 2629746000 milliseconds)
@@ -28,13 +31,16 @@ parameters = list("thetao"= c("par" = "thetao",
                           "buffer" = "10000"),
                   "zooc"= c("par" = "zooc", 
                             "fun" = "mean", 
-                            "buffer" = "10000")
-                  , "phyc"= c("par" = "phyc", 
-                              "fun" = "mean", 
-                              "buffer" = "10000")
-                  , "Energy"= c("par" = "Energy", 
-                                "fun" = "mean", 
-                                "buffer" = "10000"))
+                            "buffer" = "10000"),
+                  "phyc"= c("par" = "phyc", 
+                            "fun" = "mean", 
+                            "buffer" = "10000"),
+                  "Energy"= c("par" = "Energy", 
+                              "fun" = "most_freq", 
+                              "buffer" = "10000"),
+                  "Substrate"= c("par" = "Substrate",
+                                 "fun" = "most_freq",
+                                 "buffer"= "10000"))
 
 #check if they all exist
 for ( parameter in parameters) {
@@ -44,7 +50,7 @@ for ( parameter in parameters) {
   }
 }
 
-# Extract data ----
+# 2. Extract data ----
 #add verbose= anything to get additional info on the positions ( par_x, par_y, par_z ) and time (par_t) found in the zarr files
 enhanced_DF = enhanceDF(inputPoints = pts,
                          requestedParameters = parameters, 
@@ -54,109 +60,93 @@ enhanced_DF = enhanceDF(inputPoints = pts,
 
 glimpse(enhanced_DF)
 
-EDITOSTAC2 <- EDITOSTAC
-EDITOSTAC2$latmin[EDITOSTAC2$catalogue == "CMEMS"] <- EDITOSTAC2$latmin[EDITOSTAC2$catalogue == "CMEMS"] + 90
-EDITOSTAC2$latmax[EDITOSTAC2$catalogue == "CMEMS"] <- EDITOSTAC2$latmax[EDITOSTAC2$catalogue == "CMEMS"] + 90
-
-glimpse(EDITOSTAC %>% dplyr::select(latmin, latmax))
-glimpse(EDITOSTAC2 %>% dplyr::select(latmin, latmax))
-glimpse(EDITOSTAC %>% filter(catalogue == "CMEMS") %>% dplyr::select(latmin, latmax))
-glimpse(EDITOSTAC2 %>% filter(catalogue == "CMEMS") %>% dplyr::select(latmin, latmax))
-
-enhanced_DF2 = enhanceDF(inputPoints = pts,
-                        requestedParameters = parameters, 
-                        requestedTimeSteps = timeSteps, 
-                        stacCatalogue = EDITOSTAC2, 
-                        verbose="on")
-
-glimpse(enhanced_DF2)
-
-# Check difference in time  ----
+# 3. Check extract outcome ----
+## Check difference in time  ----
 
 enhanced_DF$Time - enhanced_DF$thetao_t
 enhanced_DF$Time - enhanced_DF$so_t
 enhanced_DF$Time - enhanced_DF$zooc_t
 enhanced_DF$Time - enhanced_DF$phyc_t
 
-# Check difference in space  ----
+## Check difference in space  ----
 library(geosphere)
 
 
 enhanced_DF$thetao_dist <- apply(enhanced_DF, 1, function(row) {
   # Convert elements to numeric
-  lon <- as.numeric(row["lon"])
-  lat <- as.numeric(row["lat"])
+  Longitude <- as.numeric(row["Longitude"])
+  Latitude <- as.numeric(row["Latitude"])
   thetao_x <- as.numeric(row["thetao_x"])
   thetao_y <- as.numeric(row["thetao_y"])
   
   # Calculate distance
-  distm(c(lon, lat), c(thetao_x, thetao_y), fun = distHaversine)
+  distm(c(Longitude, Latitude), c(thetao_x, thetao_y), fun = distHaversine)
 })
 
 enhanced_DF$so_dist <- apply(enhanced_DF, 1, function(row) {
   # Convert elements to numeric
-  lon <- as.numeric(row["lon"])
-  lat <- as.numeric(row["lat"])
+  Longitude <- as.numeric(row["Longitude"])
+  Latitude <- as.numeric(row["Latitude"])
   so_x <- as.numeric(row["so_x"])
   so_y <- as.numeric(row["so_y"])
   
   # Calculate distance
-  distm(c(lon, lat), c(so_x, so_y), fun = distHaversine)
+  distm(c(Longitude, Latitude), c(so_x, so_y), fun = distHaversine)
 })
 
 enhanced_DF$zooc_dist <- apply(enhanced_DF, 1, function(row) {
   # Convert elements to numeric
-  lon <- as.numeric(row["lon"])
-  lat <- as.numeric(row["lat"])
+  Longitude <- as.numeric(row["Longitude"])
+  Latitude <- as.numeric(row["Latitude"])
   zooc_x <- as.numeric(row["zooc_x"])
   zooc_y <- as.numeric(row["zooc_y"])
   
   # Calculate distance
-  distm(c(lon, lat), c(zooc_x, zooc_y), fun = distHaversine)
+  distm(c(Longitude, Latitude), c(zooc_x, zooc_y), fun = distHaversine)
 })
 
 enhanced_DF$phyc_dist <- apply(enhanced_DF, 1, function(row) {
   # Convert elements to numeric
-  lon <- as.numeric(row["lon"])
-  lat <- as.numeric(row["lat"])
+  Longitude <- as.numeric(row["Longitude"])
+  Latitude <- as.numeric(row["Latitude"])
   phyc_x <- as.numeric(row["phyc_x"])
   phyc_y <- as.numeric(row["phyc_y"])
   
   # Calculate distance
-  distm(c(lon, lat), c(phyc_x, phyc_y), fun = distHaversine)
+  distm(c(Longitude, Latitude), c(phyc_x, phyc_y), fun = distHaversine)
 })
 
 enhanced_DF$elevation_dist <- apply(enhanced_DF, 1, function(row) {
   # Convert elements to numeric
-  lon <- as.numeric(row["lon"])
-  lat <- as.numeric(row["lat"])
+  Longitude <- as.numeric(row["Longitude"])
+  Latitude <- as.numeric(row["Latitude"])
   elevation_x <- as.numeric(row["elevation_x"])
   elevation_y <- as.numeric(row["elevation_y"])
   
   # Calculate distance
-  distm(c(lon, lat), c(elevation_x, elevation_y), fun = distHaversine)
+  distm(c(Longitude, Latitude), c(elevation_x, elevation_y), fun = distHaversine)
 })
 
 enhanced_DF$Substrate_dist <- apply(enhanced_DF, 1, function(row) {
   # Convert elements to numeric
-  lon <- as.numeric(row["lon"])
-  lat <- as.numeric(row["lat"])
+  Longitude <- as.numeric(row["Longitude"])
+  Latitude <- as.numeric(row["Latitude"])
   Substrate_x <- as.numeric(row["Substrate_x"])
   Substrate_y <- as.numeric(row["Substrate_y"])
   
   # Calculate distance
-  distm(c(lon, lat), c(Substrate_x, Substrate_y), fun = distHaversine)
+  distm(c(Longitude, Latitude), c(Substrate_x, Substrate_y), fun = distHaversine)
 })
 
 enhanced_DF$Energy_dist <- apply(enhanced_DF, 1, function(row) {
   # Convert elements to numeric
-  lon <- as.numeric(row["lon"])
-  lat <- as.numeric(row["lat"])
+  Longitude <- as.numeric(row["Longitude"])
+  Latitude <- as.numeric(row["Latitude"])
   Energy_x <- as.numeric(row["Energy_x"])
   Energy_y <- as.numeric(row["Energy_y"])
   
   # Calculate distance
-  distm(c(lon, lat), c(Energy_x, Energy_y), fun = distHaversine)
+  distm(c(Longitude, Latitude), c(Energy_x, Energy_y), fun = distHaversine)
 })
 
 glimpse(enhanced_DF)
@@ -166,12 +156,12 @@ hist(enhanced_DF$thetao_dist)
 hist(enhanced_DF$so_dist)
 hist(enhanced_DF$phyc_dist)
 hist(enhanced_DF$zooc_dist)
-hist(enhanced_DF$elevation_dist)
+# hist(enhanced_DF$elevation_dist)
 hist(enhanced_DF$Substrate_dist)
 hist(enhanced_DF$Energy_dist)
 
-# Compare with original extraction  ----
-## Numerical variables ----
+## Compare with original extraction  ----
+### Numerical variables ----
 par(mfrow = c(3,2))
 plot(enhanced_DF$SST, enhanced_DF$thetao, cex.lab=1.3,
      xlim = c(min(enhanced_DF$SST, enhanced_DF$thetao, na.rm = T), max(enhanced_DF$SST, enhanced_DF$thetao, na.rm = T)),
@@ -185,57 +175,32 @@ plot(enhanced_DF$Phyto, enhanced_DF$phyc, cex.lab=1.3,
 plot(enhanced_DF$ZooPl, enhanced_DF$zooc, cex.lab=1.3,
      xlim = c(min(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T), max(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T)),
      ylim = c(min(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T), max(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T)))
-plot(enhanced_DF$depth, enhanced_DF$elevation, cex.lab=1.3,
-     xlim = c(min(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T), max(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T)),
-     ylim = c(min(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T), max(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T)))
+# plot(enhanced_DF$depth, enhanced_DF$elevation, cex.lab=1.3,
+#      xlim = c(min(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T), max(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T)),
+#      ylim = c(min(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T), max(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T)))
 
-## Categorical variables ----
+### Categorical variables ----
 substr_lvl <- tibble(sub_char = c("Fine mud", "Sand", "Muddy sand", "Mixed sediment",
                                   "Coarse substrate","Sandy mud or Muddy sand", "Seabed",
                                   "Rock or other hard substrata","Sandy mud", "Sandy mud or Muddy sand ",
                                   "Sediment","Fine mud or Sandy mud or Muddy sand"),
                      seabed_substrate = c(1:12))
-energy_lvl <- tibble(ene_char_old = c("High energy", "Moderate energy", "Low energy", "No energy information"),
+energy_lvl <- tibble(ene_char = c("High energy", "Moderate energy", "Low energy", "No energy information"),
                      seabed_energy = c(1:4))
 
-energy_lvl2 <- tibble(ene_char_edito = c("None","High energy","Low energy","Moderate energy","No energy information"),
-                     seabed_energy = c(1:5))
 enhanced_DF <- enhanced_DF %>%
   left_join(substr_lvl, by = c("seabed_substrate")) %>%
-  left_join(energy_lvl, by = c("seabed_energy")) %>%
-  left_join(energy_lvl2, by = c("seabed_energy"))
+  left_join(energy_lvl, by = c("seabed_energy"))
 
 glimpse(enhanced_DF)
 
-sum(enhanced_DF$Energy_Description == enhanced_DF$ene_char) / length(enhanced_DF$Energy_Description)
+sum(enhanced_DF$Energy_Description == enhanced_DF$ene_char_old) / length(enhanced_DF$Energy_Description)
+# 94% match
 sum(enhanced_DF$Substrate_Description == enhanced_DF$sub_char) / length(enhanced_DF$Substrate_Description)
-
-par(mfrow = c(1,2))
-plot(enhanced_DF$Energy, enhanced_DF$seabed_energy)
-plot(enhanced_DF$Substrate, enhanced_DF$seabed_substrate)
-
-enhanced_DF %>%
-  group_by(Substrate_Description) %>% 
-  count() %>% 
-  full_join(enhanced_DF %>%
-              group_by(sub_char) %>% 
-              count(), by = c("Substrate_Description" = "sub_char")) %>%
-  mutate(old_extraction = n.y,
-         EDITO_extraction = n.x) %>%
-  select(-n.x, -n.y)
-
-enhanced_DF %>%
-  group_by(ene_char_old) %>% 
-  count() 
-enhanced_DF %>%
-  group_by(ene_char_edito) %>% 
-  count()
-
-write.csv(enhanced_DF, "tst/extract_test.csv")
+# 82% match
 
 
-
-# Extract raster slice from .zarr ----
+# 4. Extract raster slice from .zarr ----
 source("editoTools.R")
 options("outputdebug"=c('L','M'))
 load(file = "editostacv2.par")
@@ -243,7 +208,6 @@ load(file = "editostacv2.par")
 #the requested timestep resolution of the dataset in milliseconds
 #in this case we work with monthly data (1 month = 30.436875*24*3600*1000 = 2629746000 milliseconds)
 timeSteps=c(2629746000)
-
 
 r <- getRasterSlice(parameter = "elevation",
                     lon_min = -13,
@@ -253,7 +217,6 @@ r <- getRasterSlice(parameter = "elevation",
                     requestedTimeSteps = timeSteps,
                     date = "2020-01-01",
                     stacCatalogue = EDITOSTAC)
-plot(r)
 
 r2 <- getRasterSlice(parameter = "Energy",
                      lon_min = -13,
@@ -263,26 +226,7 @@ r2 <- getRasterSlice(parameter = "Energy",
                      requestedTimeSteps = timeSteps,
                      date = "2020-01-01",
                      stacCatalogue = EDITOSTAC)
-plot(r2)
 
-r1 <- getRasterSlice(parameter = "phyc",
-                     lon_min = 0,
-                     lon_max = 120,
-                     lat_min = 10,
-                     lat_max = 80,
-                     requestedTimeSteps = timeSteps,
-                     date = "2020-01-01",
-                     stacCatalogue = EDITOSTAC)
-plot(r1)
-r2 <- getRasterSlice(parameter = "phyc",
-                     lon_min = -10,
-                     lon_max = 10,
-                     lat_min = 5,
-                     lat_max = 80,
-                     requestedTimeSteps = timeSteps,
-                     date = "2020-01-01",
-                     stacCatalogue = EDITOSTAC)
-plot(r2)
 r3 <- getRasterSlice(parameter = "phyc",
                      lon_min = -13,
                      lon_max = 10,
@@ -291,52 +235,10 @@ r3 <- getRasterSlice(parameter = "phyc",
                      requestedTimeSteps = timeSteps,
                      date = "2020-01-01",
                      stacCatalogue = EDITOSTAC)
-r4 <- getRasterSlice(parameter = "phyc",
-                     lon_min = -13,
-                     lon_max = 10,
-                     lat_min = 40,
-                     lat_max = 60,
-                     requestedTimeSteps = timeSteps,
-                     date = "2020-01-01",
-                     stacCatalogue = EDITOSTAC)
-plot(r3)
- 
-unique(EDITOSTAC$catalogue)
-stac2 <- EDITOSTAC %>% filter(catalogue  == "EMODNET")
-glimpse(stac2)
-unique(stac2$timestep)
 
-#find dataset that has multiple depth layers in EMOIDNET
 
-# Reproduce substrate error ----
-source("zarr_extraction/editoTools.R")
-options("outputdebug"=c('L','M'))
-load(file = "zarr_extraction/editostacv2.par")
-
-datafile = "zarr_extraction/data-raw/extract_test.csv"
-pts = read.delim(datafile, sep=",") %>% sample_n(100)
-glimpse(pts)
-
-#the requested timestep resolution of the dataset in milliseconds
-#in this case we work with monthly data (1 month = 30.436875*24*3600*1000 = 2629746000 milliseconds)
-timeSteps=c(2629746000)
-
-parameters = list("Energy"= c("par" = "Energy", 
-                                "fun" = "mean", 
-                                "buffer" = "10000"))
-
-enhanced_DF = enhanceDF(inputPoints = pts,
-                        requestedParameters = parameters, 
-                        requestedTimeSteps = timeSteps, 
-                        stacCatalogue = EDITOSTAC, 
-                        verbose="on")
-
-endpoint <- "https://s3.waw3-1.cloudferro.com/emodnet/emodnet_arco/emodnet_seabed_habitats/emodnet_broad_scale_seabed_habitat_map_for_europe_euseamap/EUSeaMap_2023_EUSeaMap_2023_res0.01.zarr"
-
-dsn=toGDAL(endpoint)
-r=rast(dsn)
-
-crs(r)='epsg:4326'
-ext(r)=c(-36,22.9333,42.9996,82.964)
-
+par(mfrow = c(1,3))
 plot(r)
+plot(r2)
+plot(r3)
+
