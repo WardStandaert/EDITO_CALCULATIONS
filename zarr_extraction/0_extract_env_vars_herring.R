@@ -52,9 +52,10 @@ for ( parameter in parameters) {
 
 # 2. Extract data ----
 #add verbose= anything to get additional info on the positions ( par_x, par_y, par_z ) and time (par_t) found in the zarr files
+source("editoTools.R")
 enhanced_DF = enhanceDF(inputPoints = pts,
                          requestedParameters = parameters, 
-                         requestedTimeSteps = timeSteps, 
+                         requestedTimeSteps = NA, 
                          stacCatalogue = EDITOSTAC, 
                          verbose="on")
 
@@ -63,10 +64,10 @@ glimpse(enhanced_DF)
 # 3. Check extract outcome ----
 ## Check difference in time  ----
 
-enhanced_DF$Time - enhanced_DF$thetao_t
-enhanced_DF$Time - enhanced_DF$so_t
-enhanced_DF$Time - enhanced_DF$zooc_t
-enhanced_DF$Time - enhanced_DF$phyc_t
+difftime(enhanced_DF$Time, enhanced_DF$thetao_t, units = "days")
+difftime(enhanced_DF$Time, enhanced_DF$so_t, units = "days")
+difftime(enhanced_DF$Time, enhanced_DF$zooc_t, units = "days")
+difftime(enhanced_DF$Time, enhanced_DF$phyc_t, units = "days")
 
 ## Check difference in space  ----
 library(geosphere)
@@ -209,7 +210,7 @@ load(file = "editostacv2.par")
 #in this case we work with monthly data (1 month = 30.436875*24*3600*1000 = 2629746000 milliseconds)
 timeSteps=c(2629746000)
 
-r <- getRasterSlice(parameter = "elevation",
+r <- getRasterSlice(requestedParameter = "elevation",
                     lon_min = -13,
                     lon_max = 10,
                     lat_min = 40,
@@ -218,7 +219,7 @@ r <- getRasterSlice(parameter = "elevation",
                     date = "2020-01-01",
                     stacCatalogue = EDITOSTAC)
 
-r2 <- getRasterSlice(parameter = "Energy",
+r2 <- getRasterSlice(requestedParameter = "Energy",
                      lon_min = -13,
                      lon_max = 10,
                      lat_min = 40,
@@ -227,7 +228,7 @@ r2 <- getRasterSlice(parameter = "Energy",
                      date = "2020-01-01",
                      stacCatalogue = EDITOSTAC)
 
-r3 <- getRasterSlice(parameter = "phyc",
+r3 <- getRasterSlice(requestedParameter = "phyc",
                      lon_min = -13,
                      lon_max = 10,
                      lat_min = 40,
@@ -242,3 +243,13 @@ plot(r)
 plot(r2)
 plot(r3)
 
+#5. Testing queryResolutions ----
+
+source("editoTools.R")
+
+queryResolution(requestedParameter = "elevation",
+                lon_min = -13,
+                lon_max = 10,
+                lat_min = 40,
+                lat_max = 60,
+                stacCatalogue = EDITOSTAC)

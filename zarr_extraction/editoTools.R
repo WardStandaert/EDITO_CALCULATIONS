@@ -596,7 +596,7 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     
     
     dbl()
-    dbl("par:",parameter)
+    dbl("par:",param)
     
     #check available zarr assets in the stack catalogue for the region and period in the data file
     #order by resolution and take the first record
@@ -616,7 +616,7 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     }
     
     
-    # if a prefered timestep specified, use it
+    # if a preferred timestep is specified, use it
     if(! is.null(requestedTimeSteps))
     {
       tlist=dplyr::filter(dslist, timestep %in% requestedTimeSteps)
@@ -628,6 +628,17 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     {
       tlist=dplyr::filter(dslist, asset %in% optimalChunking)
       if(nrow(tlist)>0) dslist=tlist
+    }
+    
+    #add time filter here (see lookupParameter function)
+    
+    if(nrow(dslist) > 1) {
+      dbl("Multiple options are available for your input parameters:")
+
+      print(dslist %>% select(title, latmin, latmax, lonmin, lonmax, latstep, lonstep, timestep, start_datetime, end_datetime))
+      
+      ind <- readline(prompt = paste0("choose a product (number in the range 1 - ", nrow(dslist),"): "))
+      dslist <- dslist[ind,]
     }
     
     # this object will have a dataframe $df and a logfile $log, the dataframe has several verbose columns pointing to the nearest lat,lon,time and depth found in the requested data set    
@@ -666,7 +677,7 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
 }
 
 
-getRasterSlice <- function(parameter, lon_min, lon_max, lat_min, lat_max, requestedTimeSteps = NULL, date, atDepth = NULL, stacCatalogue) {
+getRasterSlice <- function(requestedParameter, lon_min, lon_max, lat_min, lat_max, requestedTimeSteps = NULL, date, atDepth = NULL, stacCatalogue) {
   
   if(is.null(atDepth)) atDepth=0
   
@@ -675,7 +686,7 @@ getRasterSlice <- function(parameter, lon_min, lon_max, lat_min, lat_max, reques
   if(is.na(date))  dbl("failed to recognise date format, please use format %Y-%m-%d")
   
   optimalChunking=c('geoChunked','chunked')
-  dslist=dplyr::filter(stacCatalogue, par==parameter & latmin < lat_min & latmax > lat_max & lonmin < lon_min & lonmax > lon_max & chunktype %in% c('timeChunked','geoChunked','chunked')) 
+  dslist=dplyr::filter(stacCatalogue, par==requestedParameter & latmin < lat_min & latmax > lat_max & lonmin < lon_min & lonmax > lon_max & chunktype %in% c('timeChunked','geoChunked','chunked')) 
   
   # if a prefered timestep specified, use it
   if(! is.null(requestedTimeSteps))
@@ -729,8 +740,8 @@ getRasterSlice <- function(parameter, lon_min, lon_max, lat_min, lat_max, reques
   dsn=toGDAL(zinfo$href)
   
   #check if parameter is available in zarr file
-  if(parameter %in% names(zinfo$meta$arrays)) 
-    sdsn=sprintf('%s:/%s',dsn,parameter)
+  if(requestedParameter %in% names(zinfo$meta$arrays)) 
+    sdsn=sprintf('%s:/%s',dsn,requestedParameter)
   
   closest_time=NULL
   #is there a time component
@@ -766,7 +777,7 @@ getRasterSlice <- function(parameter, lon_min, lon_max, lat_min, lat_max, reques
     ext(r)=c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1])
     
     r <- crop(r, ext(lon_min, lon_max, lat_min, lat_max))
-  }} else if (parameter == "elevation") {
+  }} else if (requestedParameter == "elevation") {
     r=rast(sdsn)
     dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
     crs(r)='epsg:4326'
@@ -812,4 +823,19 @@ getRasterSlice <- function(parameter, lon_min, lon_max, lat_min, lat_max, reques
   } 
   
   return(r)
+}
+
+queryResolution = function(requestedParameter, stacCatalogue, lon_min, lon_max, lat_min, lat_max) {
+  
+  dslist=dplyr::filter(stacCatalogue, par==requestedParameter & 
+                         latmin < lat_min & 
+                         latmax > lat_max & 
+                         lonmin < lon_min & 
+                         lonmax > lon_max & chunktype %in% c('timeChunked','geoChunked','chunked')) 
+  
+  
+  dslist %>% select(timestep, latstep, lonstep, ori)
+  
+  
+  return(glimpse(dslist))
 }
