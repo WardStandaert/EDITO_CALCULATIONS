@@ -42,6 +42,10 @@ parameters = list("thetao"= c("par" = "thetao",
                                  "fun" = "most_freq",
                                  "buffer"= "10000"))
 
+parameters= list("Substrate"= c("par" = "Substrate",
+                                "fun" = "most_freq",
+                                "buffer"= "10000"))
+
 #check if they all exist
 for ( parameter in parameters) {
   param = ifelse(length(parameter) == 1, parameter, parameter["par"])
@@ -195,7 +199,7 @@ enhanced_DF <- enhanced_DF %>%
 
 glimpse(enhanced_DF)
 
-sum(enhanced_DF$Energy_Description == enhanced_DF$ene_char_old) / length(enhanced_DF$Energy_Description)
+sum(enhanced_DF$Energy_Description == enhanced_DF$ene_char) / length(enhanced_DF$Energy_Description)
 # 94% match
 sum(enhanced_DF$Substrate_Description == enhanced_DF$sub_char) / length(enhanced_DF$Substrate_Description)
 # 82% match
@@ -215,7 +219,7 @@ r <- getRasterSlice(requestedParameter = "elevation",
                     lon_max = 10,
                     lat_min = 40,
                     lat_max = 60,
-                    requestedTimeSteps = timeSteps,
+                    requestedTimeSteps = NA,
                     date = "2020-01-01",
                     stacCatalogue = EDITOSTAC)
 
@@ -224,7 +228,7 @@ r2 <- getRasterSlice(requestedParameter = "Energy",
                      lon_max = 10,
                      lat_min = 40,
                      lat_max = 60,
-                     requestedTimeSteps = timeSteps,
+                     requestedTimeSteps = NA,
                      date = "2020-01-01",
                      stacCatalogue = EDITOSTAC)
 
@@ -233,7 +237,7 @@ r3 <- getRasterSlice(requestedParameter = "phyc",
                      lon_max = 10,
                      lat_min = 40,
                      lat_max = 60,
-                     requestedTimeSteps = timeSteps,
+                     requestedTimeSteps = NA,
                      date = "2020-01-01",
                      stacCatalogue = EDITOSTAC)
 
@@ -243,13 +247,3 @@ plot(r)
 plot(r2)
 plot(r3)
 
-#5. Testing queryResolutions ----
-
-source("editoTools.R")
-
-queryResolution(requestedParameter = "elevation",
-                lon_min = -13,
-                lon_max = 10,
-                lat_min = 40,
-                lat_max = 60,
-                stacCatalogue = EDITOSTAC)

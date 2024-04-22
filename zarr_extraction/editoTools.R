@@ -414,7 +414,10 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
   #depending on the time resolution of the dataset, calculate a period to group points by timeslice
   #for some parameters we have climatology data that can be per month and other timesteps.. so check only the first one will not work..
   
-  if(! dslist$timestep[1] %in% c(NA,0) ) {
+  #add NA again here once monthly = NA is solved
+  if(! dslist$timestep[1] %in% c(0
+                                 # , NA
+                                 ) ) {
     
     #whatif the parameter has a time dimension but the pts not?
     if('Time' %in% colnames(pts))
@@ -424,7 +427,8 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
       dslist=dplyr::arrange(dslist,asset,timestep,latstep)
           
       step=dslist$timestep[1]
-      if(step==900000 ) units='15 mins'
+      if(is.na(step)) units='months'
+      else if(step==900000 ) units='15 mins'
       else if(step== 1800000 ) units='30 mins'
       else if(step== 3600000 ) units='hours'
       else if(step== 10800000 ) units='3 hours'
@@ -601,7 +605,15 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     #check available zarr assets in the stack catalogue for the region and period in the data file
     #order by resolution and take the first record
     
-    dslist=dplyr::filter(stacCatalogue, par==param & latmin < min(pts$Latitude) & latmax > max(pts$Latitude) & lonmin < min(pts$Longitude) & lonmax > max(pts$Longitude) & chunktype %in% c('timeChunked','geoChunked','chunked')) 
+    dslist=dplyr::filter(stacCatalogue, par==param & 
+                           latmin < min(pts$Latitude) & 
+                           latmax > max(pts$Latitude) & 
+                           lonmin < min(pts$Longitude) & 
+                           lonmax > max(pts$Longitude) &
+                           chunktype %in% c('timeChunked','geoChunked','chunked'))
+    
+    #if the variable is categorical, do not filter based on start and end time (should be changed to dynamic vs static variable in future)
+    if(dslist$categories[1] %in% c(NA,0))    dslist=dplyr::filter(dslist, start_datetime < min(pts$Time) & end_datetime > max(pts$Time)) 
     
 
     if(! "Time" %in% colnames(pts))
@@ -680,13 +692,22 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
 getRasterSlice <- function(requestedParameter, lon_min, lon_max, lat_min, lat_max, requestedTimeSteps = NULL, date, atDepth = NULL, stacCatalogue) {
   
   if(is.null(atDepth)) atDepth=0
+  inputPoints$Time = as.POSIXct(inputPoints$Time, tz="UTC")
   
   date <- as.POSIXct(date, format = "%Y-%m-%d")
   
   if(is.na(date))  dbl("failed to recognise date format, please use format %Y-%m-%d")
   
   optimalChunking=c('geoChunked','chunked')
-  dslist=dplyr::filter(stacCatalogue, par==requestedParameter & latmin < lat_min & latmax > lat_max & lonmin < lon_min & lonmax > lon_max & chunktype %in% c('timeChunked','geoChunked','chunked')) 
+  dslist=dplyr::filter(stacCatalogue, par==requestedParameter & 
+                         latmin < min(pts$Latitude) & 
+                         latmax > max(pts$Latitude) & 
+                         lonmin < min(pts$Longitude) & 
+                         lonmax > max(pts$Longitude) &
+                         chunktype %in% c('timeChunked','geoChunked','chunked'))
+  
+  #if the variable is categorical, do not filter based on start and end time (should be changed to dynamic vs static variable in future)
+  if(dslist$categories[1] %in% c(NA,0))    dslist=dplyr::filter(dslist, start_datetime < min(pts$Time) & end_datetime > max(pts$Time)) 
   
   # if a prefered timestep specified, use it
   if(! is.null(requestedTimeSteps))
@@ -702,37 +723,13 @@ getRasterSlice <- function(requestedParameter, lon_min, lon_max, lat_min, lat_ma
     if(nrow(tlist)>0) dslist=tlist
   }
   
-  if(! dslist$timestep[1] %in% c(NA,0) ) {
+  if(nrow(dslist) > 1) {
+    dbl("Multiple options are available for your input parameters:")
     
-    tslist=dplyr::filter(dslist,start_datetime <= date & end_datetime >= date)
+    print(dslist %>% select(title, latmin, latmax, lonmin, lonmax, latstep, lonstep, timestep, start_datetime, end_datetime))
     
-    if(nrow(tslist)>1) dslist=tslist
-    
-    dslist=dplyr::arrange(dslist,asset,timestep,latstep)
-    
-    step=dslist$timestep[1]
-    if(step==900000 ) units='15 mins'
-    else if(step== 1800000 ) units='30 mins'
-    else if(step== 3600000 ) units='hours'
-    else if(step== 10800000 ) units='3 hours'
-    else if(step== 21600000 ) units='6 hours'
-    else if(step== 86400000) units='days'
-    else if(step== 604800000) units='weeks'
-    else units='months' # most are defined as specific iso timestep ... extract should be changed
-    
-    Period=lubridate::round_date(date,units)
-    #difference between consecutive times.. needed to group in slices
-    
-    
-    dbl("ds timestep=", step, "rounded to ", units)
-    
-  }  else   {
-    #parameter has no timeresolution eg bathymetry
-    #use most recent value.. could be a different choice
-    
-    dslist=dplyr::filter(dslist, end_datetime == max(end_datetime) )
-    Period=round.POSIXt(dslist$end_datetime[1] )
-    dslist=dplyr::arrange(dslist,latstep)
+    ind <- readline(prompt = paste0("choose a product (number in the range 1 - ", nrow(dslist),"): "))
+    dslist <- dslist[ind,]
   }
   
   zinfo=getLastInfoFromZarr(dslist$href[1], dslist$ori[1])
@@ -823,19 +820,4 @@ getRasterSlice <- function(requestedParameter, lon_min, lon_max, lat_min, lat_ma
   } 
   
   return(r)
-}
-
-queryResolution = function(requestedParameter, stacCatalogue, lon_min, lon_max, lat_min, lat_max) {
-  
-  dslist=dplyr::filter(stacCatalogue, par==requestedParameter & 
-                         latmin < lat_min & 
-                         latmax > lat_max & 
-                         lonmin < lon_min & 
-                         lonmax > lon_max & chunktype %in% c('timeChunked','geoChunked','chunked')) 
-  
-  
-  dslist %>% select(timestep, latstep, lonstep, ori)
-  
-  
-  return(glimpse(dslist))
 }
