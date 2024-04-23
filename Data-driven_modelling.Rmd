@@ -2,17 +2,19 @@
 title: "Predictive modelling of Atlantic herring larvae in the Northeast Atlantic Ocean"
 author: "Ward Standaert"
 date: "2024-04-22"
-output: 
+output:
   html_document:
     self_contained: false
     toc: true
-    toc_float: true
+    toc_float:
+      collapsed: false
     toc_depth: 2
     number_sections: false
     theme: default
     highlight: default
     df_print: paged
-  bibliography: references.bib
+    fig_width: 10
+bibliography: references.bib
 ---
 
 ```{r setup, include=FALSE}
@@ -55,7 +57,7 @@ Where do you think autumn-spawning Atlantic herring spawns? In order to explore 
 
 We collect data of Atlantic herring larvae occurrences from 2000 - 2020 from the International Herring Larvae Surveys ([IHLS](https://www.ices.dk/data/data-portals/Pages/Eggs-and-larvae.aspx)). The occurrence dataset is read from a parquet file stored in the data lake.
 
-```{r step 1}
+```{r step 1,  fig.width = 7}
 # the file to process
 acf <- S3FileSystem$create(
   anonymous = T,
@@ -92,18 +94,17 @@ table(df_occs$month)
 ## 1.2 Remove duplicates
 
 We start with `r nrow(df_occs)` occurrences.
+
 ```{r step 2}
 df_occs <- df_occs %>%
   distinct(year, month, Longitude, Latitude, .keep_all = TRUE)
 ```
-After removal of duplicates, `r nrow(df_occs)` occurrences are left.
 
+After removal of duplicates, `r nrow(df_occs)` occurrences are left.
 
 ## 1.3 Reduce sampling bias
 
-To deal with sampling bias, a spatial filtering technique was applied. 
-Here we thinned the occurrences so that each pair of occurrences hass a minimum distance of 10 nautical miles or 18.52 km.
-This distance is the recommended distance between valid hauls in the DATRAS traxwl surveys. 
+To deal with sampling bias, a spatial filtering technique is applied [@vollering2019bunching]. Here we thinned the occurrences so that each pair of occurrences has a minimum distance of 10 nautical miles or 18.52 km. This distance is the recommended distance between valid hauls in the DATRAS trawl surveys [@international2015manual].
 
 ```{r step 3, eval = FALSE}
 # Thin towards distance of 10 NM or 18.52 km
@@ -132,7 +133,7 @@ for (y in 1:length(2000:2020)) {
 save(df_occs_thinned, file = "data/df_thinned.Rdata")
 ```
 
-```{r step 3.2}
+```{r step 3.2, fig.width = 7}
 load("data/df_thinned.Rdata")
 
 nrow(df_occs_thinned)
@@ -340,7 +341,6 @@ stat_df <- data.frame(statistic = c("AUC", "TSS", "TPR", "TNR"),
 stat_df
 ```
 
-
 ## 2.2 Response curves
 
 ```{r step 10, warning=FALSE}
@@ -468,3 +468,4 @@ for (m in unique(df_occ_bg_env$month)) {
 plot(predictions)
 ```
 
+# 4. References
