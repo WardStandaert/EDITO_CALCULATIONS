@@ -15,10 +15,10 @@ invisible(lapply(pckgs, library, character.only = TRUE))
 rm(pckgs)
 
 #Rarr package needs separate install
-if (!require("BiocManager", quietly = TRUE))
-  install.packages("BiocManager")
-
-BiocManager::install("Rarr")
+# if (!require("BiocManager", quietly = TRUE))
+#   install.packages("BiocManager")
+# 
+# BiocManager::install("Rarr")
 library("Rarr")
 
 ##########  PART 1 - train model  ########## 
@@ -128,7 +128,7 @@ load("data/df_thinned.Rdata")
 # glimpse(abs)
 # 
 # save(abs, file = "zarr_extraction/absences_save.Rdata")
-load("zarr_extraction/absences_save.Rdata")
+load("zarr_extraction/SAVE/absences_save.Rdata")
 
 #combine occurrences and background points
 df_occ_bg <- rbind(df_occs_thinned %>% mutate(presence = 1), 
@@ -171,7 +171,7 @@ df_occ_bg_env <- df_occ_bg_env %>% select(Longitude, Latitude, year, month,
                                           thetao, so, zooc, phyc)
 
 # save(df_occ_bg_env, file = "zarr_extraction/pres_abs_env_save.Rdata")
-load(file = "pres_abs_env_save.Rdata")
+load(file = "zarr_extraction/SAVE/pres_abs_env_save.Rdata")
 
 
 # remove observations where no environmental values were present
@@ -219,12 +219,10 @@ model_fit <- ENMeval::ENMevaluate(occs = df_occ_bg_env %>%
                                   parallel = TRUE)
 
 
-
+# save(model_fit, file = "SAVE/model_fit_save.Rdata")
+load("zarr_extraction/SAVE/model_fit_save.Rdata")
 
 print(model_fit %>% eval.results() %>% filter(delta.AICc == 0))
-
-# save(model_fit, file = "model_fit_save.Rdata")
-load("model_fit_save.Rdata")
 
 
 #7 model evaluation AUC & TSS ----
