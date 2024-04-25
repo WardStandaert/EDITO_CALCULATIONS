@@ -4,6 +4,7 @@ author: "Ward Standaert"
 date: "2024-04-22"
 output:
   html_document:
+    css: bootstrap.min.css
     self_contained: false
     toc: true
     toc_float:
@@ -47,11 +48,14 @@ setwd("/home/onyxia/work/EDITO_CALCULATIONS/")
 
 ```
 
+
 # Introduction
 
 Where do you think autumn-spawning Atlantic herring spawns? In order to explore the spawning distribution of Atlantic herring, species distribution models were created for larvae of herring.
 
+
 # 1. Collect data and build model
+
 
 ## 1.1 Collect & organize occurrence data
 
@@ -91,9 +95,10 @@ table(df_occs$month)
 
 ```
 
+
 ## 1.2 Remove duplicates
 
-We start with `r nrow(df_occs)` occurrences.
+We start with `r nrow(df_occs)` occurrences from the IHLS.
 
 ```{r step 2}
 df_occs <- df_occs %>%
@@ -101,6 +106,7 @@ df_occs <- df_occs %>%
 ```
 
 After removal of duplicates, `r nrow(df_occs)` occurrences are left.
+
 
 ## 1.3 Reduce sampling bias
 
@@ -145,7 +151,12 @@ mapview(df_occs_thinned %>% dplyr::select(Longitude) %>% pull,
 
 ```
 
+After dealing with spatial bias, `r nrow(df_occs_thinned)` occurrences remain for modelling.
+
+
 ## 1.4 Create background points
+
+We will use Maximum entropy (Maxent) models to fit the habitat suitability of herring larvae [@phillips2004maximum]. This modelling approach makes use of background points instead of (pseudo-)absences to characterize the study area [@phillips2009sample]. Here, we derive background points using a buffer of 100 km around the occurrences [@barve2011crucial]. 
 
 ```{r step 4, eval = FALSE}
 # lets take a spatial buffer of 100 km around the occurrence points for this example
@@ -168,7 +179,16 @@ glimpse(abs)
 save(abs, file = "zarr_extraction/absences_save.Rdata")
 ```
 
-## 1.5 Sample environmental variables at occurrences and background points
+
+## 1.5 Extract environmental values at occurrences and background points
+
+At each occurrence and background point, we want to know what the value is of the environmental variables at this location and time.
+
+Historically, this was proceeded by a cumbersome process of looking for and downloading relevant maps for each parameter. Then, environmental values could be extracted at point locations from these maps. Now, most of the available oceanic environmental data is stored in the datalake as .zarr files. These .zarr files can be accessed efficiently, directly at the location and time needed. This process greatly improves the speed of the process.
+
+The spatial resolution of environmental variables should match the resolution of the species records during species distribution modelling [@sillero2021common]. For this reason, the extraction method from .zarr files allows for the inclusion of a buffer around the requested coordinates. As such, environmental values are not only extracted at the requested longitude, latitude and time coordinate, but from all cells within the specified buffer around the location. Next, a user specified function (i.e. mean, max, min, median) is applied to these values to summarize this information into one value for each requested longitude, latitude and time coordinate. This way, an uncertainty is added to the location of the occurrence / (pseudo-)absence / background point. 
+In this example, we apply a buffer of 10 NM, which is the resolution of the occurrence data. 
+
 
 ```{r step 5, eval = FALSE}
 load("zarr_extraction/SAVE/absences_save.Rdata")
@@ -237,7 +257,10 @@ df_occ_bg_env <- df_occ_bg_env %>%
 save(df_occ_bg_env, file = "zarr_extraction/SAVE/pres_abs_env_save.Rdata")
 ```
 
+
 ## 1.6 Model creation using ENMeval
+
+Maxent can be tailored by employing combinations of feature classes and regularization multipliers [@phillips2006modelling]. Fifteen combinations were tested using the corrected Akaike's Information Criterion (AICc) as a selection criterion [@zeng2016novel]. 
 
 ```{r step 6, eval = FALSE}
 load(file = "zarr_extraction/SAVE/pres_abs_env_save.Rdata")
@@ -273,11 +296,15 @@ load("zarr_extraction/SAVE/model_fit_save.Rdata")
 print(model_fit %>% eval.results() %>% filter(delta.AICc == 0))
 ```
 
+
 # 2. Analyse model
+
 
 ## 2.1 Evaluate model
 
-The default output only shows the AUC. We also want to calculated the TSS, TPR and TNR.
+
+The default output only shows the Area Under the Curve of the Receiver Operating Characteristic plot (AUC) metric. We also want to calculate the True Skill Statistic (TSS), the True Positive Rate (TPR) and the True Negative Rate (TNR) to get a more complete image of the model performance [@grimmett2020presence].
+
 
 ```{r step 7}
 load(file = "zarr_extraction/SAVE/pres_abs_env_save.Rdata")
@@ -341,7 +368,10 @@ stat_df <- data.frame(statistic = c("AUC", "TSS", "TPR", "TNR"),
 stat_df
 ```
 
+
 ## 2.2 Response curves
+
+Visualize the partial response curves of the occurrence of larvae of herring per environemntal variable, using a bootstrapping method derived from @thuiller2009biomod.
 
 ```{r step 10, warning=FALSE}
 vs <- c("depth", "SST", "SSS", "Phyto", "ZooPl", "windfarms", "sub_char", "ene_char")
@@ -402,11 +432,13 @@ for (i in 1:nrow(name_key)) {
 grid.arrange(depth, SST, SSS, Phyto, ZooPl, windfarms, ene_char, sub_char)
 ```
 
+
 # 3. Project model
+
 
 ## 3.1 Get raster slices to project on
 
-using the getRasterSlice function
+Maps are derived from the .zarr files in the datalake at a given time and between a set of longitude and latitudes.
 
 ```{r step 8}
 variables <- c("depth", "SST", "SSS", "Phyto",
@@ -422,6 +454,7 @@ eval_res <- model_fit
 opt.aicc <- eval.results(model_fit) %>% filter(delta.AICc == 0)
 mod <- eval_res@models[[which(names(eval_res@models) == opt.aicc$tune.args)]]
 ```
+
 
 ## 3.2 Spatial predictions
 
@@ -468,4 +501,6 @@ for (m in unique(df_occ_bg_env$month)) {
 plot(predictions)
 ```
 
+
 # 4. References
+
