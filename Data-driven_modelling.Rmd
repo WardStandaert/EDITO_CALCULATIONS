@@ -290,90 +290,29 @@ save(model_fit, file = "SAVE/model_fit_save.Rdata")
 
 Show results from ENMevaluate
 
+The default output shows the Area Under the Curve of the Receiver Operating Characteristic plot (AUC) metric as an evaluation metric. This metric was derived using a 5-fold cross validation.
+
 ```{r step 7.2}
 load("zarr_extraction/SAVE/model_fit_save.Rdata")
 
 print(model_fit %>% eval.results() %>% filter(delta.AICc == 0))
 ```
 
+The outcomes show that the lowest AICc score is acchieved using a regularization multiplier of 1 and the feature combinations of linear, quadratic and hinge. Using 5-fold cross-validation, the model has an AUC score of 0.81, which implies a good fit according to @krzanowski2009roc.
 
 # 2. Analyse model
 
-
-## 2.1 Evaluate model
-
-
-The default output only shows the Area Under the Curve of the Receiver Operating Characteristic plot (AUC) metric. We also want to calculate the True Skill Statistic (TSS), the True Positive Rate (TPR) and the True Negative Rate (TNR) to get a more complete image of the model performance [@grimmett2020presence].
-
-
-```{r step 7}
-load(file = "zarr_extraction/SAVE/pres_abs_env_save.Rdata")
-
-AUC_maxent <- list()
-TSS_maxent <- list()
-
-Presences <- df_occ_bg_env %>%                                    
-  filter(presence == 1) %>% 
-  dplyr::select(Longitude, Latitude, depth, Phyto, SSS, SST, windfarms, ZooPl, ene_char, sub_char)
-Background <- df_occ_bg_env %>%                                    
-  filter(presence == 0) %>% 
-  dplyr::select(Longitude, Latitude, depth, Phyto, SSS, SST, windfarms, ZooPl, ene_char, sub_char)
-
-tmp_AUC <- list()
-tmp_TSS <- list()
-for (i in 1:10) {
-  #Generate "k" groups:
-  k<-4 #division of the data will be 75% Vs 25%
-  
-  groups_pres<-kfold(Presences,k) #Kfold divide the data, assigning every row to one of the K groups randomly.
-  groups_abs<-kfold(Background,k)
-  
-  #Four groups will be used to generate the model and the rest of the point (one group) will be used to evaluate it:
-  EvalBg<-Background[groups_pres==1,]
-  TrainBg<-Background[groups_pres!=1,]
-  
-  EvalPres<-Presences[groups_pres==1,]
-  TrainPres<-Presences[groups_pres!=1,]
-  
-  #get model settings
-  eval_res <- model_fit
-  opt.aicc <- eval.results(model_fit) %>% filter(delta.AICc == 0)
-  mod <- eval_res@models[[which(names(eval_res@models) == opt.aicc$tune.args)]]
-  
-  EvalBgRes  <- predict(mod, EvalBg, type = "cloglog")
-  EvalPresRes  <- predict(mod, EvalPres, type = "cloglog")
-  
-  tmp_AUC[[i]]<-evaluate(c(EvalPresRes), c(EvalBgRes))
-  umbral_maxent<-threshold( tmp_AUC[[i]])
-  tmp_TSS[[i]]<-evaluate(p=c(EvalPresRes), a=c(EvalBgRes), tr=umbral_maxent$spec_sens)
-}
-
-AUC_maxent <- tmp_AUC
-TSS_maxent <- tmp_TSS
-
-AUC_maxent_vect  <- sapply(AUC_maxent,function(x){slot(x,'auc')})
-TPR_maxent_vect  <- sapply(TSS_maxent,function(x){slot(x,'TPR')})
-TNR_maxent_vect  <- sapply(TSS_maxent,function(x){slot(x,'TNR')})
-TSS_maxent_vect  <- TPR_maxent_vect + TNR_maxent_vect - 1
-
-stat_df <- data.frame(AUC = c(mean(AUC_maxent_vect), sd(AUC_maxent_vect)),
-                      TSS = c(mean(TSS_maxent_vect), sd(TSS_maxent_vect)),
-                      TPR = c(mean(TPR_maxent_vect), sd(TPR_maxent_vect)),
-                      TNR = c(mean(TNR_maxent_vect), sd(TNR_maxent_vect)))
-
-stat_df <- data.frame(statistic = c("AUC", "TSS", "TPR", "TNR"),
-                      mean = c(mean(AUC_maxent_vect), mean(TSS_maxent_vect), mean(TPR_maxent_vect), mean(TNR_maxent_vect)),
-                      sd = c(sd(TSS_maxent_vect), sd(TSS_maxent_vect), sd(TPR_maxent_vect), sd(TNR_maxent_vect)))
-  
-stat_df
-```
-
-
-## 2.2 Response curves
+## 2.1 Response curves
 
 Visualize the partial response curves of the occurrence of larvae of herring per environemntal variable, using a bootstrapping method derived from @thuiller2009biomod.
 
 ```{r step 10, warning=FALSE}
+load(file = "zarr_extraction/SAVE/pres_abs_env_save.Rdata")
+
+eval_res <- model_fit
+opt.aicc <- eval.results(model_fit) %>% filter(delta.AICc == 0)
+mod <- eval_res@models[[which(names(eval_res@models) == opt.aicc$tune.args)]]
+  
 vs <- c("depth", "SST", "SSS", "Phyto", "ZooPl", "windfarms", "sub_char", "ene_char")
 
 name_key <- data.frame(old = c("depth", "SST", "SSS", "Phyto", "ZooPl", "windfarms", "sub_char", "ene_char"),
@@ -438,7 +377,9 @@ grid.arrange(depth, SST, SSS, Phyto, ZooPl, windfarms, ene_char, sub_char)
 
 ## 3.1 Get raster slices to project on
 
-Maps are derived from the .zarr files in the datalake at a given time and between a set of longitude and latitudes.
+Make spatial predictions for the entire study area of the Northeast Atlantic. This is done by combining the created model with maps of the environemntal variables. We will make a projection of the model for January 2020 here. 
+
+Maps are derived from the .zarr files in the datalake at a given time and between a set of longitude and latitudes (defined by the study area).
 
 ```{r step 8}
 variables <- c("depth", "SST", "SSS", "Phyto",
@@ -457,6 +398,8 @@ mod <- eval_res@models[[which(names(eval_res@models) == opt.aicc$tune.args)]]
 
 
 ## 3.2 Spatial predictions
+
+Spatial predictions are restricted to the months were occurrence data of herring larvae is available (September, October, December and January). This is the same period where autumn-spawning herring spawn.
 
 ```{r step 9}
 
