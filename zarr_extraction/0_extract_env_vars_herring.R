@@ -34,17 +34,14 @@ parameters = list("thetao"= c("par" = "thetao",
                             "buffer" = "10000"),
                   "phyc"= c("par" = "phyc", 
                             "fun" = "mean", 
-                            "buffer" = "10000"),
-                  "Energy"= c("par" = "Energy", 
-                              "fun" = "most_freq", 
-                              "buffer" = "10000"),
-                  "Substrate"= c("par" = "Substrate",
-                                 "fun" = "most_freq",
-                                 "buffer"= "10000"))
+                            "buffer" = "10000"))
 
-parameters= list("Substrate"= c("par" = "Substrate",
-                                "fun" = "most_freq",
-                                "buffer"= "10000"))
+# parameters= list("Energy"= c("par" = "Energy", 
+#                              "fun" = "most_freq", 
+#                              "buffer" = "10000"),
+#                  "Substrate"= c("par" = "Substrate",
+#                                 "fun" = "most_freq",
+#                                 "buffer"= "10000"))
 
 #check if they all exist
 for ( parameter in parameters) {
@@ -63,7 +60,30 @@ enhanced_DF = enhanceDF(inputPoints = pts,
                          stacCatalogue = EDITOSTAC, 
                          verbose="on")
 
+2
+#2,2,2,4
 glimpse(enhanced_DF)
+
+
+## Compare with original extraction  ----
+### Numerical variables ----
+par(mfrow = c(3,2))
+plot(enhanced_DF$SST, enhanced_DF$thetao, cex.lab=1.3,
+     xlim = c(min(enhanced_DF$SST, enhanced_DF$thetao, na.rm = T), max(enhanced_DF$SST, enhanced_DF$thetao, na.rm = T)),
+     ylim = c(min(enhanced_DF$SST, enhanced_DF$thetao, na.rm = T), max(enhanced_DF$SST, enhanced_DF$thetao, na.rm = T)))
+plot(enhanced_DF$SSS, enhanced_DF$so, cex.lab=1.3,
+     xlim = c(min(enhanced_DF$SSS, enhanced_DF$so, na.rm = T), max(enhanced_DF$SSS, enhanced_DF$so, na.rm = T)),
+     ylim = c(min(enhanced_DF$SSS, enhanced_DF$so, na.rm = T), max(enhanced_DF$SSS, enhanced_DF$so, na.rm = T)))
+plot(enhanced_DF$Phyto, enhanced_DF$phyc, cex.lab=1.3,
+     xlim = c(min(enhanced_DF$Phyto, enhanced_DF$phyc, na.rm = T), max(enhanced_DF$Phyto, enhanced_DF$phyc, na.rm = T)),
+     ylim = c(min(enhanced_DF$Phyto, enhanced_DF$phyc, na.rm = T), max(enhanced_DF$Phyto, enhanced_DF$phyc, na.rm = T)))
+plot(enhanced_DF$ZooPl, enhanced_DF$zooc, cex.lab=1.3,
+     xlim = c(min(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T), max(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T)),
+     ylim = c(min(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T), max(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T)))
+# plot(enhanced_DF$depth, enhanced_DF$elevation, cex.lab=1.3,
+#      xlim = c(min(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T), max(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T)),
+#      ylim = c(min(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T), max(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T)))
+
 
 # 3. Check extract outcome ----
 ## Check difference in time  ----
@@ -165,24 +185,6 @@ hist(enhanced_DF$zooc_dist)
 hist(enhanced_DF$Substrate_dist)
 hist(enhanced_DF$Energy_dist)
 
-## Compare with original extraction  ----
-### Numerical variables ----
-par(mfrow = c(3,2))
-plot(enhanced_DF$SST, enhanced_DF$thetao, cex.lab=1.3,
-     xlim = c(min(enhanced_DF$SST, enhanced_DF$thetao, na.rm = T), max(enhanced_DF$SST, enhanced_DF$thetao, na.rm = T)),
-     ylim = c(min(enhanced_DF$SST, enhanced_DF$thetao, na.rm = T), max(enhanced_DF$SST, enhanced_DF$thetao, na.rm = T)))
-plot(enhanced_DF$SSS, enhanced_DF$so, cex.lab=1.3,
-     xlim = c(min(enhanced_DF$SSS, enhanced_DF$so, na.rm = T), max(enhanced_DF$SSS, enhanced_DF$so, na.rm = T)),
-     ylim = c(min(enhanced_DF$SSS, enhanced_DF$so, na.rm = T), max(enhanced_DF$SSS, enhanced_DF$so, na.rm = T)))
-plot(enhanced_DF$Phyto, enhanced_DF$phyc, cex.lab=1.3,
-     xlim = c(min(enhanced_DF$Phyto, enhanced_DF$phyc, na.rm = T), max(enhanced_DF$Phyto, enhanced_DF$phyc, na.rm = T)),
-     ylim = c(min(enhanced_DF$Phyto, enhanced_DF$phyc, na.rm = T), max(enhanced_DF$Phyto, enhanced_DF$phyc, na.rm = T)))
-plot(enhanced_DF$ZooPl, enhanced_DF$zooc, cex.lab=1.3,
-     xlim = c(min(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T), max(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T)),
-     ylim = c(min(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T), max(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T)))
-# plot(enhanced_DF$depth, enhanced_DF$elevation, cex.lab=1.3,
-#      xlim = c(min(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T), max(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T)),
-#      ylim = c(min(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T), max(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T)))
 
 ### Categorical variables ----
 substr_lvl <- tibble(sub_char = c("Fine mud", "Sand", "Muddy sand", "Mixed sediment",
@@ -232,18 +234,70 @@ r2 <- getRasterSlice(requestedParameter = "Energy",
                      date = "2020-01-01",
                      stacCatalogue = EDITOSTAC)
 
-r3 <- getRasterSlice(requestedParameter = "phyc",
+r3 <- getRasterSlice(requestedParameter = "thetao",
                      lon_min = -13,
                      lon_max = 10,
-                     lat_min = 40,
+                     lat_min = 50,
                      lat_max = 60,
                      requestedTimeSteps = NA,
-                     date = "2020-01-01",
+                     date = "2020-12-01",
                      stacCatalogue = EDITOSTAC)
+plot(r3)
+
 
 
 par(mfrow = c(1,3))
 plot(r)
 plot(r2)
-plot(r3)
+
+
+#5. edit EDITOSTAC ----
+
+parameters= list("Energy"= c("par" = "Energy",
+                             "fun" = "most_freq",
+                             "buffer" = "10000"),
+                 "Substrate"= c("par" = "Substrate",
+                                "fun" = "most_freq",
+                                "buffer"= "10000"))
+
+parameters= list("thetao"= c("par" = "thetao",
+                                "fun" = "mean",
+                                "buffer"= "10000"))
+
+EDITOSTAC2 <- EDITOSTAC %>% 
+  add_row(asset = "zarr_data",
+          par = "marine_strategy_framework_directive_benthic_broad_habitat_type",
+          href = "https://s3.waw3-1.cloudferro.com/emodnet/emodnet_arco/emodnet_seabed_habitats/emodnet_broad_scale_seabed_habitat_map_for_europe_euseamap/EUSeaMap_2023_EUSeaMap_2023_res0.01.zarr",
+          title = "EUSeaMap_2023",
+          latmin = 22.93,
+          latmax = 82.96,
+          lonmin = -36.0,
+          lonmax = 43.0,
+          chunktype = "chunked",
+          catalogue = "EMODNET",
+          categories = 123) %>%
+  add_row(asset = "zarr_data",
+          par = "seabed_energy",
+          href = "https://s3.waw3-1.cloudferro.com/emodnet/emodnet_arco/emodnet_seabed_habitats/emodnet_broad_scale_seabed_habitat_map_for_europe_euseamap/EUSeaMap_2023_EUSeaMap_2023_res0.01.zarr",
+          title = "EUSeaMap_2023",
+          latmin = 22.93,
+          latmax = 82.96,
+          lonmin = -36.0,
+          lonmax = 43.0,
+          chunktype = "chunked",
+          catalogue = "EMODNET",
+          categories = 123)
+
+
+
+
+source("editoTools_no_flip.R") #no flip, no lat transform
+enhanced_DF = enhanceDF(inputPoints = pts,
+                        requestedParameters = parameters, 
+                        requestedTimeSteps = NA, 
+                        stacCatalogue = EDITOSTAC2, 
+                        verbose="on")
+
+glimpse(enhanced_DF)
+
 

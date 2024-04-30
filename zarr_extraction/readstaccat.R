@@ -5,7 +5,7 @@ library(doParallel)
 source("helpers.R")
 options("outputdebug"=c('M'))
 
-getChildrenLinks<-function(url="https://edito-infra.dev.emodnet.eu/emodnetstacdev/catalog.json",allowed=c('child','item'),step=1 )
+getChildrenLinks<-function(url="https://edito-infra.dev.emodnet.eu/emodnetstac/catalog.json",allowed=c('child','item'),step=1 )
 {
   
  
@@ -140,8 +140,8 @@ loadEMODNETStacCatalogue<-function()
   dbl("getting links")
   options("outputdebug"=c('silent'))
   Estacdf=tibble()
-  elinks=getChildrenLinks("https://edito-infra.dev.emodnet.eu/emodnetstacdev/catalog.json")
-  links=getChildrenLinks("https://s3.waw3-1.cloudferro.com/mdl-metadata/metadata/catalog.stac.json")
+  elinks=getChildrenLinks(url = "https://edito-infra.dev.emodnet.eu/emodnetstac/catalog.json")
+  links=getChildrenLinks(url = "https://s3.waw3-1.cloudferro.com/mdl-metadata/metadata/catalog.stac.json")
   links=c(elinks,links)
   options("outputdebug"=c('M'))
   

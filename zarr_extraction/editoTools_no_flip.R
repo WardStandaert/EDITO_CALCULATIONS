@@ -191,9 +191,7 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
   }
   
   r=rast(sdsn)
-
-  if(isCategory)  r=flip(r, "vertical")
-
+  
   if(crs(r)=="") {
     dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
     crs(r)='epsg:4326'
@@ -202,33 +200,33 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
   
   parTabel=dplyr::tibble()
   
-
- try({
- 
-   #simple lookup if there is no buffer and function provided
-   if(length(params) == 1) {
-     parTabel=terra::extract(x = r, y = dplyr::select(coords,x,y), ID= F, xy=T) 
-   } else {
-   
-       bufferSize = as.numeric(params[["buffer"]])
-       fun = params[["fun"]]
-       bufferedY = terra::buffer(vect(cbind(coords$x, coords$y), crs="+proj=longlat"), bufferSize)
-       
-       if(isCategory) {
-         dbl("using most frequent value in buffer to look up categorical data")
-         
-         par2 = terra::extract(x=r, y=bufferedY, table , na.rm=T)
-         parTabel = cbind(as.numeric(colnames(par2)[max.col(par2)]), dplyr::select(coords,x,y))
-       } else {
-         dbl("using buffer to look up data")
-         
-         parTabel = cbind(terra::extract(x=r, y=bufferedY, fun, na.rm=T, ID= F),
-                          dplyr::select(coords,x,y))
-       }
-   }
- }, silent=T)
-
- 
+  
+  try({
+    
+    #simple lookup if there is no buffer and function provided
+    if(length(params) == 1) {
+      parTabel=terra::extract(x = r, y = dplyr::select(coords,x,y), ID= F, xy=T) 
+    } else {
+      
+      bufferSize = as.numeric(params[["buffer"]])
+      fun = params[["fun"]]
+      bufferedY = terra::buffer(vect(cbind(coords$x, coords$y), crs="+proj=longlat"), bufferSize)
+      
+      if(isCategory) {
+        dbl("using most frequent value in buffer to look up categorical data")
+        
+        par2 = terra::extract(x=r, y=bufferedY, table , na.rm=T)
+        parTabel = cbind(as.numeric(colnames(par2)[max.col(par2)]), dplyr::select(coords,x,y))
+      } else {
+        dbl("using buffer to look up data")
+        
+        parTabel = cbind(terra::extract(x=r, y=bufferedY, fun, na.rm=T, ID= F),
+                         dplyr::select(coords,x,y))
+      }
+    }
+  }, silent=T)
+  
+  
   cn=c('','_x','_y')
   
   if(nrow(parTabel) > 0) 
@@ -303,7 +301,7 @@ getTimeSeriesFromZarr<-function(usePar, coords, from=NULL, till=NULL, zinfo){
 getLastInfoFromZarr<-function(href,ori=NULL)
 {
   
-
+  
   #info from zarr file specified in href
   meta=jsonlite::fromJSON(gdal_utils('mdiminfo', toGDAL(href), quiet = T))
   
@@ -351,10 +349,10 @@ getLastInfoFromZarr<-function(href,ori=NULL)
   if(is.null(zi$latstep) | is.null(zi$latmin)) 
   {
     dbl("getting step metadata from arrays")
-    zi$latmin = read_zarr_array(sprintf("%s%s", href, '/latitude' ), index=list(1), s3_client = s3_client(endpoint))
+    zi$latmin = min(read_zarr_array(sprintf("%s%s", href, '/latitude' ), s3_client = s3_client(endpoint)))
     zi$latsize=(meta$dimensions %>% dplyr::filter(name=='latitude'))$size
     
-    zi$latmax = read_zarr_array(sprintf("%s%s", href, '/latitude' ), index=list(zi$latsize), s3_client = s3_client(endpoint))
+    zi$latmax = max(read_zarr_array(sprintf("%s%s", href, '/latitude' ), s3_client = s3_client(endpoint)))
     zi$latstep= (zi$latmax-zi$latmin)/zi$latsize
     
     zi$lonmin = read_zarr_array(sprintf("%s%s", href, '/longitude' ), index=list(1), s3_client = s3_client(endpoint))
@@ -391,7 +389,7 @@ getLastInfoFromZarr<-function(href,ori=NULL)
   
   zi$meta=meta
   zi$href=href
-    
+  
   return(zi )
   
 }
@@ -409,7 +407,7 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
   mcoptions=list(preschedule=F, silent=F)
   dbl("workers:",getDoParWorkers())
   
-
+  
   
   #depending on the time resolution of the dataset, calculate a period to group points by timeslice
   #for some parameters we have climatology data that can be per month and other timesteps.. so check only the first one will not work..
@@ -417,36 +415,36 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
   #add NA again here once monthly = NA is solved
   if(! dslist$timestep[1] %in% c(0
                                  # , NA
-                                 ) ) {
+  ) ) {
     
     #whatif the parameter has a time dimension but the pts not?
     if('Time' %in% colnames(pts))
     {  tslist=dplyr::filter(dslist,start_datetime <= min(pts$Time) & end_datetime >= max(pts$Time))  
-      if(nrow(tslist)>1) dslist=tslist
-      
-      dslist=dplyr::arrange(dslist,asset,timestep,latstep)
-          
-      step=dslist$timestep[1]
-      if(is.na(step)) units='months'
-      else if(step==900000 ) units='15 mins'
-      else if(step== 1800000 ) units='30 mins'
-      else if(step== 3600000 ) units='hours'
-      else if(step== 10800000 ) units='3 hours'
-      else if(step== 21600000 ) units='6 hours'
-      else if(step== 86400000) units='days'
-      else if(step== 604800000) units='weeks'
-      else units='months' # most are defined as specific iso timestep ... extract should be changed
-      
-      pts=dplyr::arrange(pts,Time)
-      pts$Period=lubridate::round_date(pts$Time,units)
-      #difference between consecutive times.. needed to group in slices
-      
-      
-      dbl("ds timestep=", step, "rounded to ", units)
-      
+    if(nrow(tslist)>1) dslist=tslist
     
-       
-      
+    dslist=dplyr::arrange(dslist,asset,timestep,latstep)
+    
+    step=dslist$timestep[1]
+    if(is.na(step)) units='months'
+    else if(step==900000 ) units='15 mins'
+    else if(step== 1800000 ) units='30 mins'
+    else if(step== 3600000 ) units='hours'
+    else if(step== 10800000 ) units='3 hours'
+    else if(step== 21600000 ) units='6 hours'
+    else if(step== 86400000) units='days'
+    else if(step== 604800000) units='weeks'
+    else units='months' # most are defined as specific iso timestep ... extract should be changed
+    
+    pts=dplyr::arrange(pts,Time)
+    pts$Period=lubridate::round_date(pts$Time,units)
+    #difference between consecutive times.. needed to group in slices
+    
+    
+    dbl("ds timestep=", step, "rounded to ", units)
+    
+    
+    
+    
     }  
   }
   #parameter has no timeresolution eg bathymetry
@@ -466,16 +464,16 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
   
   dsng=dslist$href[1]
   
-  zinfo=getLastInfoFromZarr(dslist$href[1], dslist$ori[1])
+  zinfo=getLastInfoFromZarr(dslist$href[1],dslist$href[1])
   
-  # lat_transform = function(x) {x + 90}
-  # 
-  # if(dslist$catalogue[1] == "CMEMS") { 
-  #   zinfo$latmin = lat_transform(zinfo$latmin)
-  #   zinfo$latmax = lat_transform(zinfo$latmax)
-  #   } 
-     
-
+  lat_transform = function(x) {x + 90}
+  
+  if(dslist$catalogue[1] == "CMEMS") { 
+    zinfo$latmin = lat_transform(zinfo$latmin)
+    zinfo$latmax = lat_transform(zinfo$latmax)
+  } 
+  
+  
   if("Time" %in% colnames(pts))
   {
     pts$diff= as.numeric(difftime(pts$Time,pts$Time[1], 'secs'))
@@ -483,8 +481,8 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
     locs=dplyr::group_by(pts,Longitude,Latitude,Slice) %>% dplyr::summarise(from=min(Period),till=max(Period), cnt=n(), .groups='drop')
   }
   else
-   locs=dplyr::group_by(pts,Longitude,Latitude) %>% dplyr::summarise(from=min(Period),till=max(Period), cnt=n(), .groups='drop')
-
+    locs=dplyr::group_by(pts,Longitude,Latitude) %>% dplyr::summarise(from=min(Period),till=max(Period), cnt=n(), .groups='drop')
+  
   
   lookup=c("Time","Longitude","Latitude","loop","method")
   names(lookup)=c(sprintf("vb_%s_t", param),sprintf("vb_%s_x", param),sprintf("vb_%s_y",param),sprintf("vb_%s_l",param),sprintf("vb_%s_m",param))
@@ -547,16 +545,17 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
   }  
   resulting = cbind(pts,  resulting  )
   
-
+  
   
   dbl("par:", param, "records: ", nrow(resulting))
   newpiece=list(usePar=list("href"= dsng, "par"=param,"nr"= nrow(resulting),"points"=nrow(locs),"periods"=length(periods),"stacinfo"= dplyr::slice(dslist,1),"zarrmeta"=zinfo$meta ,"progress"=loglist ) )
   names(newpiece)=c(param)
- 
+  
   #for category data, add the description found in the zarr meta data
   if(!dslist$categories[1] %in% c(NA,0))
   {
-    catdesc=zinfo$meta$attributes[[param]]
+    catdesc=zinfo$meta$arrays[[param]]
+    catdesc=catdesc$attributes
     resulting[[paste0(param,"_Description")]]=ifelse(resulting[[param]] %in% catdesc,  names(catdesc)[match(resulting[[param]], catdesc)] ,'NA')
   }
   
@@ -570,7 +569,7 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
 
 enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCatalogue, verbose="")
 {
-
+  
   #we need to group the sampling points to reduce the data lookups
   #rounding to 3 deg decimals for lat/lon ot minutes for time is a very crude approximation
   #better is to use a snap to grid approach based on the spatiotemporal resolution of the parameter  
@@ -581,7 +580,7 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
   if("Time" %in% colnames(inputPoints)) {
     inputPoints$Time = as.POSIXct(inputPoints$Time, tz="UTC")
     inputPoints=dplyr::mutate(inputPoints,RTime=round.POSIXt(Time,units="mins"), RLatitude= round(Latitude, 3), RLongitude= round(Longitude,3) )
-    optimalChunking=c('timeChunked','geoChunked','chunked')
+    optimalChunking=c('geoChunked','chunked')
   } else {
     inputPoints=dplyr::mutate(inputPoints,RLatitude= round(Latitude, 3), RLongitude= round(Longitude,3) )
     optimalChunking=c('timeChunked','chunked')
@@ -589,7 +588,7 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
   
   pts=dplyr::select(inputPoints,Latitude=RLatitude,Longitude=RLongitude,any_of(c("Time"="RTime")),any_of(c("Bathymetry","Elevation"))) %>% dplyr::distinct()
   
-
+  
   extracted=c()
   
   for(currentPar in 1:length(requestedParameters))
@@ -606,16 +605,16 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     #order by resolution and take the first record
     
     dslist=dplyr::filter(stacCatalogue, par==param & 
-                           latmin <= min(pts$Latitude) & 
-                           latmax >= max(pts$Latitude) & 
-                           lonmin <= min(pts$Longitude) & 
-                           lonmax >= max(pts$Longitude) &
+                           latmin < min(pts$Latitude) & 
+                           latmax > max(pts$Latitude) & 
+                           lonmin < min(pts$Longitude) & 
+                           lonmax > max(pts$Longitude) &
                            chunktype %in% c('timeChunked','geoChunked','chunked'))
     
     #if the variable is categorical, do not filter based on start and end time (should be changed to dynamic vs static variable in future)
-    if(dslist$categories[1] %in% c(NA,0))    dslist=dplyr::filter(dslist, start_datetime <= min(pts$Time) & end_datetime >= max(pts$Time)) 
+    if(dslist$categories[1] %in% c(NA,0))    dslist=dplyr::filter(dslist, start_datetime < min(pts$Time) & end_datetime > max(pts$Time)) 
     
-
+    
     if(! "Time" %in% colnames(pts))
       dslist=dplyr::filter(dslist,timestep %in% c(NA,0))
     
@@ -646,8 +645,8 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     
     if(nrow(dslist) > 1) {
       dbl("Multiple options are available for your input parameters:")
-
-      print(dslist %>% select(title, latmin, latmax, lonmin, lonmax, latstep, lonstep, timestep, start_datetime, end_datetime, chunktype))
+      
+      print(dslist %>% select(title, latmin, latmax, lonmin, lonmax, latstep, lonstep, timestep, start_datetime, end_datetime))
       
       ind <- readline(prompt = paste0("choose a product (number in the range 1 - ", nrow(dslist),"): "))
       dslist <- dslist[ind,]
@@ -657,15 +656,15 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     extracted=CombineC(extracted, lookupParameter(dslist=dslist,usePar=parameter,pts=pts,atDepth=8) )
     
   }
-   
-
+  
+  
   
   #add the parameters to the requested points
   # if(nrow(pts)==nrow(extracted$df))
   #   pts=cbind(pts,extracted$df)
   # 
   
- pts=extracted$df
+  pts=extracted$df
   
   #add everything to the user data frame
   #join the results, depending on available columns
@@ -698,21 +697,28 @@ getRasterSlice <- function(requestedParameter, lon_min, lon_max, lat_min, lat_ma
   
   if(is.na(date))  dbl("failed to recognise date format, please use format %Y-%m-%d")
   
-  #do not use geoChunked data (R cannot read these very well as rasters)
+  optimalChunking=c('geoChunked','chunked')
   dslist=dplyr::filter(stacCatalogue, par==requestedParameter & 
                          latmin < min(pts$Latitude) & 
                          latmax > max(pts$Latitude) & 
                          lonmin < min(pts$Longitude) & 
                          lonmax > max(pts$Longitude) &
-                         chunktype %in% c('timeChunked','chunked'))
+                         chunktype %in% c('timeChunked','geoChunked','chunked'))
   
   #if the variable is categorical, do not filter based on start and end time (should be changed to dynamic vs static variable in future)
-  if(dslist$categories[1] %in% c(NA,0))    dslist=dplyr::filter(dslist, start_datetime <= date & end_datetime >= date) 
+  if(dslist$categories[1] %in% c(NA,0))    dslist=dplyr::filter(dslist, start_datetime < min(pts$Time) & end_datetime > max(pts$Time)) 
   
   # if a prefered timestep specified, use it
   if(! is.null(requestedTimeSteps))
   {
     tlist=dplyr::filter(dslist, timestep %in% requestedTimeSteps)
+    if(nrow(tlist)>0) dslist=tlist
+  }
+  
+  # geochunked, timechunked or just chunked, to be optimized in future versions
+  if(! is.null(optimalChunking))
+  {
+    tlist=dplyr::filter(dslist, asset %in% optimalChunking)
     if(nrow(tlist)>0) dslist=tlist
   }
   
@@ -767,14 +773,49 @@ getRasterSlice <- function(requestedParameter, lon_min, lon_max, lat_min, lat_ma
     ext(r)=c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1])
     
     r <- crop(r, ext(lon_min, lon_max, lat_min, lat_max))
-  }} else {
+  }} else if (requestedParameter == "elevation") {
     r=rast(sdsn)
     dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
     crs(r)='epsg:4326'
     ext(r)=c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1])
     
     r <- crop(r, ext(lon_min, lon_max, lat_min, lat_max))
-  
+  } else {
+    
+    #temporarily add transformation function for latitudes in CMEMS layers
+    lat_transform = function(x) {x + 90}
+    
+    closest_min_lon_ind = closest(seq(zinfo$lonmin, zinfo$lonmax, by=zinfo$lonstep),lon_min)
+    closest_min_lon = seq(zinfo$lonmin, zinfo$lonmax, by=zinfo$lonstep)[closest_min_lon_ind]
+    closest_max_lon_ind = closest(seq(zinfo$lonmin, zinfo$lonmax, by=zinfo$lonstep),lon_max)
+    closest_max_lon = seq(zinfo$lonmin, zinfo$lonmax, by=zinfo$lonstep)[closest_max_lon_ind]
+    
+    closest_min_lat_ind = closest(seq(lat_transform(zinfo$latmin), lat_transform(zinfo$latmax), 
+                                      by=zinfo$latstep),lat_min)
+    closest_min_lat = seq(lat_transform(zinfo$latmin), lat_transform(zinfo$latmax), by=zinfo$latstep)[closest_min_lat_ind]
+    closest_max_lat_ind = closest(seq(lat_transform(zinfo$latmin), lat_transform(zinfo$latmax), by=zinfo$latstep),
+                                  lat_max)
+    closest_max_lat = seq(lat_transform(zinfo$latmin), lat_transform(zinfo$latmax), by=zinfo$latstep)[closest_max_lat_ind]
+    
+    r=rast(sdsn)
+    
+    vals <- r[closest_min_lat_ind:closest_max_lat_ind,
+              closest_min_lon_ind:closest_max_lon_ind,
+              1]
+    vals <- c(vals[[1]])
+    
+    dim(vals) <- c(length(seq(closest_min_lon, closest_max_lon, by=zinfo$lonstep)),
+                   length(seq(closest_min_lat, closest_max_lat, by=zinfo$latstep)))
+    
+    r2 <- rast(t(vals))
+    ext(r2) <- c(closest_min_lon, closest_max_lon, 
+                 closest_min_lat, closest_max_lat)
+    
+    dbl("assuming epsg:4326, extent from stac catalogue")
+    crs(r2) <- 'epsg:4326'
+    
+    r <- r2
+    
   } 
   
   return(r)

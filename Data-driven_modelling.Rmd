@@ -115,6 +115,7 @@ To deal with sampling bias, a spatial filtering technique is applied [@vollering
 ```{r step 3, eval = FALSE}
 # Thin towards distance of 10 NM or 18.52 km
 # This is the distance between valid hauls in ICES trawl surveys
+set.seed(123)
 
 df_occs_thinned <- df_occs[0,] %>% select(-Time)
 for (y in 1:length(2000:2020)) {
