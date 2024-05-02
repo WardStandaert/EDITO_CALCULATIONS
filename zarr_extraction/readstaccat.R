@@ -8,7 +8,32 @@ options("outputdebug"=c('M'))
 getChildrenLinks<-function(url="https://edito-infra.dev.emodnet.eu/emodnetstac/catalog.json",allowed=c('child','item'),step=1 )
 {
   
- 
+  dbl('step',step)
+  links= retryJson(url)$links
+  if(is.null(links) ||  class(links)!='data.frame') {dbl('end here');return(paste('dont',url))}
+  
+  children= links  %>% dplyr::filter(rel %in% allowed)
+  refs = stringr::str_replace(url,tail(unlist(stringr::str_split(url,stringr::fixed('/'))),n=1),stringr::str_remove(children$href,stringr::fixed("./")))
+  #dbl('to do ',length(refs))
+  
+  if(length(refs)==0) return(url)
+  
+  all=c()
+  
+  all= foreach(r=1:length(refs) ,.options.silent=F, .combine='append') %dopar%
+    {
+      newlinks=getChildrenLinks(url=refs[r], step=step+1)
+
+
+    }
+   return(all)
+  
+}
+
+getChildrenLinks2<-function(url="https://edito-infra.dev.emodnet.eu/emodnetstac/catalog.json",allowed=c('child','item'),step=1 )
+{
+  
+  
   
   dbl('step',step)
   links= retryJson(url)$links
@@ -21,23 +46,24 @@ getChildrenLinks<-function(url="https://edito-infra.dev.emodnet.eu/emodnetstac/c
   if(length(refs)==0) return(url)
   
   
-all=c()
-# 
-#    for(r in refs) {
-#      newlinks=getChildrenLinks(url=r, step=step+1)
-#   #   dbl('new links', length(newlinks))
-#      if(length(newlinks)>0) all=c(all,newlinks)
-#     
-#    }
+  all=c()
   
-  all= foreach(r=1:length(refs) ,.options.silent=F, .combine='append') %dopar%    
-    {
-      newlinks=getChildrenLinks(url=refs[r], step=step+1)
-         
-      
-    }
-   return(all)
+  for(r in refs) {
+    newlinks=getChildrenLinks(url=r, step=step+1)
+    #   dbl('new links', length(newlinks))
+    if(length(newlinks)>0) all=c(all,newlinks)
+  }
   
+  return(all)
+  
+}
+
+
+for (i in 1:5) {
+  url = elinks[i]
+  print(url)
+  cat=retryJson(url)
+  print(cat$assets[1]$native_asset$type)
 }
 
 parseStacJson<-function(url)
@@ -54,13 +80,13 @@ parseStacJson<-function(url)
     step3=cat$assets[[a]]
     vars=names(step3$viewVariables)
     
-    if(stringr::str_detect(url,"emodnet") &  cat$assets[[a]]$type== "application/zarr")
+    if(stringr::str_detect(url,"emodnet") &  cat$assets[[a]]$type == "application/zip")
     {
       try({ 
         thisstacdf=dplyr::add_row(thisstacdf,
                                   "asset"=a,
-                                  "par"=cat$properties$dataset_variable_name, # needs translation after standardizing
-                                  "standardname"=cat$properties$dataset_variable_name,
+                                  "par"=cat$id, # needs translation after standardizing
+                                  "standardname"=cat$id,
                                   "href"=cat$assets[[a]]$href,
                                   "reftype"=cat$assets[[a]]$type,
                                   "title"=ifelse(is.null(cat$properties$title), cat$id , cat$properties$title ) ,
@@ -141,7 +167,7 @@ loadEMODNETStacCatalogue<-function()
   options("outputdebug"=c('silent'))
   Estacdf=tibble()
   elinks=getChildrenLinks(url = "https://edito-infra.dev.emodnet.eu/emodnetstac/catalog.json")
-  links=getChildrenLinks(url = "https://s3.waw3-1.cloudferro.com/mdl-metadata/metadata/catalog.stac.json")
+  links=getChildrenLinks2(url = "https://s3.waw3-1.cloudferro.com/mdl-metadata/metadata/catalog.stac.json")
   links=c(elinks,links)
   options("outputdebug"=c('M'))
   
