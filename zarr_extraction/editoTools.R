@@ -700,10 +700,10 @@ getRasterSlice <- function(requestedParameter, lon_min, lon_max, lat_min, lat_ma
   
   #do not use geoChunked data (R cannot read these very well as rasters)
   dslist=dplyr::filter(stacCatalogue, par==requestedParameter & 
-                         latmin < min(pts$Latitude) & 
-                         latmax > max(pts$Latitude) & 
-                         lonmin < min(pts$Longitude) & 
-                         lonmax > max(pts$Longitude) &
+                         latmin <= lat_min & 
+                         latmax >= lat_max & 
+                         lonmin <= lon_min & 
+                         lonmax >= lon_max &
                          chunktype %in% c('timeChunked','chunked'))
   
   #if the variable is categorical, do not filter based on start and end time (should be changed to dynamic vs static variable in future)
@@ -719,7 +719,7 @@ getRasterSlice <- function(requestedParameter, lon_min, lon_max, lat_min, lat_ma
   if(nrow(dslist) > 1) {
     dbl("Multiple options are available for your input parameters:")
     
-    print(dslist %>% select(title, latmin, latmax, lonmin, lonmax, latstep, lonstep, timestep, start_datetime, end_datetime))
+    print(dslist %>% dplyr::select(title, latmin, latmax, lonmin, lonmax, latstep, lonstep, timestep, start_datetime, end_datetime))
     
     ind <- readline(prompt = paste0("choose a product (number in the range 1 - ", nrow(dslist),"): "))
     dslist <- dslist[ind,]
@@ -776,6 +776,101 @@ getRasterSlice <- function(requestedParameter, lon_min, lon_max, lat_min, lat_ma
     r <- crop(r, ext(lon_min, lon_max, lat_min, lat_max))
   
   } 
+  
+  return(r)
+}
+getRasterSlice2 <- function(requestedParameter='thetao', lon_min=-10, lon_max=10, lat_min=50, lat_max=60, requestedTimeSteps = NULL, date = NULL, atDepth = NULL, stacCatalogue) {
+  
+  if(is.null(atDepth)) atDepth=0
+  if(! is.null(date))
+  { date <- as.POSIXct(date, format = "%Y-%m-%d")
+  if(is.na(date)) {
+    dbl("failed to recognise date format, please use format %Y-%m-%d")
+    date=NULL
+  }}
+  
+  if(! is.null(date))  
+    dslist=dplyr::filter(stacCatalogue, par==requestedParameter & 
+                           latmin <= lat_min & 
+                           latmax >= lat_max & 
+                           lonmin <= lon_min & 
+                           lonmax >= lon_max &
+                           start_datetime <= date & end_datetime >= date &
+                           chunktype %in% c('timeChunked','chunked'))
+  
+  else  
+    dslist=dplyr::filter(stacCatalogue, par==requestedParameter & 
+                           latmin <= lat_min & 
+                           latmax >= lat_max & 
+                           lonmin <= lon_min & 
+                           lonmax >= lon_max &
+                           chunktype %in% c('timeChunked','chunked'))
+  
+  
+  # if a prefered timestep specified, use it
+  if(! is.null(requestedTimeSteps))
+  {
+    tlist=dplyr::filter(dslist, timestep %in% requestedTimeSteps)
+    if(nrow(tlist)>0) dslist=tlist
+  }
+  
+  
+  # we should try to avoid user interaction at this stage
+  if(nrow(dslist) > 1) {
+    dbl("Multiple options are available for your input parameters:")
+    
+    print(dslist %>% dplyr::select(title, latmin, latmax, lonmin, lonmax, latstep, lonstep, timestep, start_datetime, end_datetime))
+    
+    ind <- readline(prompt = paste0("choose a product (number in the range 1 - ", nrow(dslist),"): "))
+    dslist <- dslist[ind,]
+  }
+  
+  zinfo=getLastInfoFromZarr(dslist$href[1], dslist$ori[1])
+  
+  dsn=toGDAL(zinfo$href)
+  
+  #check if parameter is available in zarr file
+  if(requestedParameter %in% names(zinfo$meta$arrays)) 
+    sdsn=sprintf('%s:/%s',dsn,requestedParameter)
+  
+  closest_time=NULL
+  #is there a time component
+  if('time' %in% zinfo$meta$dimensions$name & !is.null(zinfo$times))
+  {
+    if(length(zinfo$times) > 1)
+    { 
+      if(is.null(date)) closest_time=1 #take first available data
+      else closest_time=closest(zinfo$times,date)
+      
+      sdsn=sprintf('%s:%s',sdsn,max(closest_time-1,1))
+    }
+  }
+  
+  #is the data in several depth or elevation levels
+  closest_level=NULL
+  if('elevation' %in% zinfo$meta$dimensions$name & !is.null(zinfo$levels) )
+  { 
+    if(length(zinfo$levels) > 1)
+    {
+      closest_level=closest(zinfo$levels,atDepth)
+      sdsn=sprintf('%s:%s',sdsn,max(closest_level-1,1) )
+      closest_level = zinfo$levels[closest_level]
+    }
+  }
+  
+  
+  
+  r=rast(sdsn)
+  # temporary hack
+  if(str_detect( zinfo$href, "euseamap")) r=flip(r,direction="vertical")
+  
+  dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
+  crs(r)='epsg:4326'
+  ext(r)=c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1])
+  
+  r <- crop(r, ext(lon_min, lon_max, lat_min, lat_max))
+  
+  
   
   return(r)
 }

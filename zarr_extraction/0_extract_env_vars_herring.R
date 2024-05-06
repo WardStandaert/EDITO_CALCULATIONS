@@ -244,11 +244,32 @@ r3 <- getRasterSlice(requestedParameter = "thetao",
                      stacCatalogue = EDITOSTAC)
 plot(r3)
 
+r3 <- getRasterSlice2(requestedParameter = "phyc",
+                     lon_min = -13,
+                     lon_max = 10,
+                     lat_min = 50,
+                     lat_max = 60,
+                     requestedTimeSteps = NA,
+                     date = "2020-12-01",
+                     stacCatalogue = EDITOSTAC)
+plot(r3)
+
 
 
 par(mfrow = c(1,3))
 plot(r)
 plot(r2)
+
+
+getRasterSlice2("zooc",
+                stacCatalogue = EDITOSTAC,
+                lon_min = -12,
+                lon_max = 10,
+                lat_min = 48,
+                lat_max = 62,
+                requestedTimeSteps = NA,
+                date = "2020-01-01")
+
 
 
 #5. edit EDITOSTAC ----
