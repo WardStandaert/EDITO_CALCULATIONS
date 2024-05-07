@@ -23,17 +23,17 @@ timeSteps=c(2629746000)
 
 
 #the requested parameters, names in the stac catalogue table field 'par' .. see unique(stacCatalogue$par) for a list 
-parameters = list("thetao"= c("par" = "thetao", 
-                              "fun" = "mean", 
-                              "buffer" = "10000"), 
-                  "so"= c("par" = "so", 
-                          "fun" = "mean", 
+parameters = list("thetao"= c("par" = "thetao",
+                              "fun" = "mean",
+                              "buffer" = "10000"),
+                  "so"= c("par" = "so",
+                          "fun" = "mean",
                           "buffer" = "10000"),
-                  "zooc"= c("par" = "zooc", 
-                            "fun" = "mean", 
+                  "zooc"= c("par" = "zooc",
+                            "fun" = "mean",
                             "buffer" = "10000"),
-                  "phyc"= c("par" = "phyc", 
-                            "fun" = "mean", 
+                  "phyc"= c("par" = "phyc",
+                            "fun" = "mean",
                             "buffer" = "10000"))
 
 # parameters= list("Energy"= c("par" = "Energy", 
@@ -42,6 +42,10 @@ parameters = list("thetao"= c("par" = "thetao",
 #                  "Substrate"= c("par" = "Substrate",
 #                                 "fun" = "most_freq",
 #                                 "buffer"= "10000"))
+
+parameters = list("zooc"= c("par" = "zooc", 
+                            "fun" = "mean", 
+                            "buffer" = "10000"))
 
 #check if they all exist
 for ( parameter in parameters) {
@@ -56,12 +60,13 @@ for ( parameter in parameters) {
 source("editoTools.R")
 enhanced_DF = enhanceDF(inputPoints = pts,
                          requestedParameters = parameters, 
-                         requestedTimeSteps = NA, 
+                         requestedTimeSteps = 86400000, 
                          stacCatalogue = EDITOSTAC, 
                          verbose="on")
 
 2
 #2,2,2,4
+#always opt for timeChunked
 glimpse(enhanced_DF)
 
 

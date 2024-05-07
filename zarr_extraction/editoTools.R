@@ -166,6 +166,19 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
   if(param %in% names(zinfo$meta$arrays)) 
     sdsn=sprintf('%s:/%s',dsn,param)
   
+  #if an averaging needs to be done
+  for(d in 1:lubridate::days_in_month(atTime)) {
+    closest_time=closest(zinfo$times,atTime + lubridate::days(d) - 1)
+    sdsn_d=sprintf('%s:%s',sdsn,max(closest_time-1,1))
+    r_d = rast(sdsn_d)
+    if(d == 1) r = r_d
+    else r = c(r, r_d)
+  }
+  plot(r)
+  
+  parTabel = cbind(rowMeans(terra::extract(x=r, y=bufferedY, fun, na.rm=T, ID= F)),
+                   dplyr::select(coords,x,y))
+  
   closest_time=NULL
   #is there a time component
   if('time' %in% zinfo$meta$dimensions$name & !is.null(zinfo$times))
@@ -632,6 +645,10 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     if(! is.null(requestedTimeSteps))
     {
       tlist=dplyr::filter(dslist, timestep %in% requestedTimeSteps)
+      if(nrow(tlist)==0) {
+        dbl("No layers present for the given parameter, locations and timestep.")
+        return()
+      }
       if(nrow(tlist)>0) dslist=tlist
     }
     
