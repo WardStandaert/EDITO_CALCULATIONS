@@ -1,7 +1,7 @@
 ---
 title: "Predictive modelling of Atlantic herring larvae in the Northeast Atlantic Ocean"
 author: "Ward Standaert"
-date: "2024-04-22"
+date: "2024-05-22"
 output:
   html_document:
     css: bootstrap.min.css
@@ -15,20 +15,24 @@ output:
     highlight: default
     df_print: paged
     fig_width: 10
+    fig_height: 6
 bibliography: references.bib
 csl: apa.csl
 ---
 
+```{=html}
+<style>
+.html-widget {
+    margin: auto;
+}
+</style>
+```
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
 # install and load packages
-pckgs <- c("raster","sp","proj4","ncdf4","car","mgcv","dismo","rJava","ENMeval",
-           "boot","gstat","mgcv", "ggplot2", "tidyr", "dynamicSDM", "stringr", 
-           "mapdata", "base","tidync", "sf", "mapview", "ape", "spdep", 
-           "spThin", "StatMatch", "CoordinateCleaner", "maxnet", "rasterVis",
-           "tibble", "purrr", "tidyverse", "arrow", "tidyverse", "gridExtra",
-           "doParallel", "rasterVis")
+pckgs <- c("arrow", "tidyverse", "doParallel", "rasterVis", "mapview", 
+           "ENMeval", "dynamicSDM", "gridExtra", "maxnet", "raster", "spThin")
 
 installed_packages <- pckgs %in% rownames(installed.packages())
 
@@ -95,8 +99,7 @@ mapview(df_occs %>% dplyr::select(Longitude) %>% pull,
         crs = "epsg:4326")
 ```
 
-We start with `r nrow(df_occs)` occurrences from the IHLS.
-These occurrences are present in the following months:
+<br/> We start with `r nrow(df_occs)` occurrences from the IHLS. These occurrences are present in the following months:
 
 ```{r step 1.2,  fig.width = 7}
 table(df_occs$month)
@@ -133,7 +136,7 @@ df_occs_thinned <-
                                    lat.col = "Latitude", long.col = "Longitude",
                                    spec.col = "species", thin.par = 18.52, reps = 1,
                                    write.files = FALSE, locs.thinned.list.return = TRUE,
-                                   verbose = FALSE)[[1]]
+                                   verbose = FALSE, write.log.file = FALSE)[[1]]
     
     tmp_df_thinned |> mutate(
       year = c(2000:2020)[y],
@@ -155,7 +158,7 @@ mapview(df_occs_thinned %>% dplyr::select(Longitude) %>% pull,
 
 ```
 
-After dealing with spatial bias, `r nrow(df_occs_thinned)` occurrences remain for modelling.
+<br/> After dealing with spatial bias, `r nrow(df_occs_thinned)` occurrences remain for modelling.
 
 ## 1.4 Create background points
 
@@ -296,11 +299,9 @@ load("zarr_extraction/SAVE/model_fit_save.Rdata")
 print(model_fit %>% eval.results() %>% filter(delta.AICc == 0))
 ```
 
-The outcomes show that the lowest AICc score is achieved using a regularization multiplier of 1 and the feature combinations of linear, quadratic and hinge. Using 5-fold cross-validation, the model has an AUC score of `r model_fit %>% eval.results() %>% filter(delta.AICc == 0) %>% select(auc.val.avg) %>% round(2) %>% pull()`, which implies a good fit according to @krzanowski2009roc.
+The outcomes show that the lowest AICc score is achieved using a regularization multiplier of 1 and the feature combinations of linear, quadratic and hinge. Using 5-fold cross-validation, the model has an AUC score of `r model_fit %>% eval.results() %>% filter(delta.AICc == 0) %>% dplyr::select(auc.val.avg) %>% round(2) %>% pull()`, which implies a good fit according to @krzanowski2009roc.
 
-# 2. Analyse model
-
-## 2.1 Response curves
+## 1.7 Response curves
 
 Visualize the partial response curves of the occurrence of larvae of herring per environmental variable, using a bootstrapping method derived from @thuiller2009biomod.
 
