@@ -11,10 +11,10 @@ load(file = "./data-raw/editostacv2.par")
 # the file to process
 # datafile = "./data-raw/herring_test_set.csv"
 datafile = "./herring_zarr_extraction_test_output.csv"
-pts = read.delim(datafile, sep=",") %>% sample_n(100)
-glimpse(pts)
+points = read.delim(datafile, sep=",") %>% sample_n(100)
+glimpse(points)
 
-pts <- pts %>%
+points <- points %>%
   dplyr::select(Longitude, Latitude, Year, Month, Time, SST, SSS, windfarms, ZooPl, Phyto, seabed_energy, seabed_substrate, depth)
 
 #the requested timestep resolution of the dataset in milliseconds
@@ -31,7 +31,8 @@ parameters = list("thetao"= c("par" = "thetao",
                           "buffer" = "10000"),
                   "zooc"= c("par" = "zooc",
                             "fun" = "mean",
-                            "buffer" = "10000"),
+                            "buffer" = "10000",
+                            "convert_from_timestep" = 86400000),
                   "phyc"= c("par" = "phyc",
                             "fun" = "mean",
                             "buffer" = "10000"))
@@ -43,9 +44,6 @@ parameters = list("thetao"= c("par" = "thetao",
 #                                 "fun" = "most_freq",
 #                                 "buffer"= "10000"))
 
-parameters = list("zooc"= c("par" = "zooc", 
-                            "fun" = "mean", 
-                            "buffer" = "10000"))
 
 #check if they all exist
 for ( parameter in parameters) {
@@ -58,14 +56,14 @@ for ( parameter in parameters) {
 # 2. Extract data ----
 #add verbose= anything to get additional info on the positions ( par_x, par_y, par_z ) and time (par_t) found in the zarr files
 source("editoTools.R")
-enhanced_DF = enhanceDF(inputPoints = pts,
+enhanced_DF = enhanceDF(inputPoints = points,
                          requestedParameters = parameters, 
-                         requestedTimeSteps = 86400000, 
+                         requestedTimeSteps = NA, 
                          stacCatalogue = EDITOSTAC, 
                          verbose="on")
 
-2
-#2,2,2,4
+
+#1,1,1,1
 #always opt for timeChunked
 glimpse(enhanced_DF)
 
@@ -318,7 +316,7 @@ EDITOSTAC2 <- EDITOSTAC %>%
 
 
 source("editoTools_no_flip.R") #no flip, no lat transform
-enhanced_DF = enhanceDF(inputPoints = pts,
+enhanced_DF = enhanceDF(inputPoints = points,
                         requestedParameters = parameters, 
                         requestedTimeSteps = NA, 
                         stacCatalogue = EDITOSTAC2, 

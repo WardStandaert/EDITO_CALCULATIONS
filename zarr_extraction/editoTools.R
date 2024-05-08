@@ -13,6 +13,7 @@ library(magrittr)
 library(dplyr)
 library(Rarr)
 library(stringr)
+library(lubridate)
 
 
 #function used to specify an s3 client based on the path, and assuming anonymous access, 
@@ -164,20 +165,7 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
   
   #check if parameter is available in zarr file
   if(param %in% names(zinfo$meta$arrays)) 
-    sdsn=sprintf('%s:/%s',dsn,param)
-  
-  #if an averaging needs to be done
-  for(d in 1:lubridate::days_in_month(atTime)) {
-    closest_time=closest(zinfo$times,atTime + lubridate::days(d) - 1)
-    sdsn_d=sprintf('%s:%s',sdsn,max(closest_time-1,1))
-    r_d = rast(sdsn_d)
-    if(d == 1) r = r_d
-    else r = c(r, r_d)
-  }
-  plot(r)
-  
-  parTabel = cbind(rowMeans(terra::extract(x=r, y=bufferedY, fun, na.rm=T, ID= F)),
-                   dplyr::select(coords,x,y))
+    sdsn=sdsn_par=sprintf('%s:/%s',dsn,param)
   
   closest_time=NULL
   #is there a time component
@@ -218,24 +206,35 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
 
  try({
  
-   #simple lookup if there is no buffer and function provided
-   if(length(params) == 1) {
+   #simple extract function if there is no buffer provided
+   if(!"buffer" %in% names(params)) {
      parTabel=terra::extract(x = r, y = dplyr::select(coords,x,y), ID= F, xy=T) 
-   } else {
-   
+   } else {  #if buffer value is provided
        bufferSize = as.numeric(params[["buffer"]])
        fun = params[["fun"]]
        bufferedY = terra::buffer(vect(cbind(coords$x, coords$y), crs="+proj=longlat"), bufferSize)
        
+       # derive the most frequent category for categorical variables
        if(isCategory) {
          dbl("using most frequent value in buffer to look up categorical data")
          
          par2 = terra::extract(x=r, y=bufferedY, table , na.rm=T)
          parTabel = cbind(as.numeric(colnames(par2)[max.col(par2)]), dplyr::select(coords,x,y))
-       } else {
+       } else if (!"convert_from_timestep" %in% names(params)) {
          dbl("using buffer to look up data")
          
          parTabel = cbind(terra::extract(x=r, y=bufferedY, fun, na.rm=T, ID= F),
+                          dplyr::select(coords,x,y))
+       } else {
+         #an averaging needs to be done towards a more coarse timestep
+         for(d in 1:lubridate::days_in_month(atTime)) {
+           closest_time=closest(zinfo$times,atTime + lubridate::days(d) - 1)
+           sdsn_d=sprintf('%s:%s',sdsn_par,max(closest_time-1,1))
+           r_d = rast(sdsn_d)
+           if(d == 1) r = r_d
+           else r = c(r, r_d)
+         }
+         parTabel = cbind(rowMeans(terra::extract(x=r, y=bufferedY, fun, na.rm=T, ID= F)),
                           dplyr::select(coords,x,y))
        }
    }
@@ -441,13 +440,13 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
           
       step=dslist$timestep[1]
       if(is.na(step)) units='months'
-      else if(step==900000 ) units='15 mins'
+      else if(step== 900000 ) units='15 mins'
       else if(step== 1800000 ) units='30 mins'
       else if(step== 3600000 ) units='hours'
       else if(step== 10800000 ) units='3 hours'
       else if(step== 21600000 ) units='6 hours'
       else if(step== 86400000) units='days'
-      else if(step== 604800000) units='weeks'
+      else if(step== 604800000 ) units='weeks'
       else units='months' # most are defined as specific iso timestep ... extract should be changed
       
       pts=dplyr::arrange(pts,Time)
@@ -634,7 +633,7 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     
     if(nrow(dslist)==0) {
       if(param %in% stacCatalogue$par)
-        dbl("no data assets fit the criteria ")
+        dbl("no data assets fit the criteria")
       else
         dbl("requested parameter ", param, " not found")
       next
@@ -645,8 +644,13 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     if(! is.null(requestedTimeSteps))
     {
       tlist=dplyr::filter(dslist, timestep %in% requestedTimeSteps)
+      if("convert_from_timestep" %in% names(parameter)) {
+        dbl(paste0("Converting timestep ", requestedTimeSteps, " into ", as.numeric(parameter["convert_from_timestep"])))
+        requestedTimeSteps2 = as.numeric(parameter["convert_from_timestep"])
+        tlist=dplyr::filter(dslist, timestep %in% requestedTimeSteps2)
+        }
       if(nrow(tlist)==0) {
-        dbl("No layers present for the given parameter, locations and timestep.")
+        dbl("no data assets fit the criteria")
         return()
       }
       if(nrow(tlist)>0) dslist=tlist
@@ -664,7 +668,7 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     if(nrow(dslist) > 1) {
       dbl("Multiple options are available for your input parameters:")
 
-      print(dslist %>% select(title, latmin, latmax, lonmin, lonmax, latstep, lonstep, timestep, start_datetime, end_datetime, chunktype))
+      print(dslist %>% dplyr::select(title, latmin, latmax, lonmin, lonmax, latstep, lonstep, timestep, start_datetime, end_datetime, chunktype))
       
       ind <- readline(prompt = paste0("choose a product (number in the range 1 - ", nrow(dslist),"): "))
       dslist <- dslist[ind,]
@@ -891,3 +895,4 @@ getRasterSlice2 <- function(requestedParameter='thetao', lon_min=-10, lon_max=10
   
   return(r)
 }
+
