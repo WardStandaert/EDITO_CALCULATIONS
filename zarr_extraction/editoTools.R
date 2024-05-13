@@ -580,7 +580,7 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
 }
 
 
-enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCatalogue, verbose="")
+enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCatalogue, verbose="", pick_layers = NULL)
 {
 
   #we need to group the sampling points to reduce the data lookups
@@ -603,6 +603,8 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
   
 
   extracted=c()
+  
+  sources=c()
   
   for(currentPar in 1:length(requestedParameters))
   { 
@@ -665,7 +667,7 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     
     #add time filter here (see lookupParameter function)
     
-    if(nrow(dslist) > 1) {
+    if(is.null(pick_layers) & nrow(dslist) > 1) {
       dbl("Multiple options are available for your input parameters:")
 
       print(dslist %>% dplyr::select(title, latmin, latmax, lonmin, lonmax, latstep, lonstep, timestep, start_datetime, end_datetime, chunktype))
@@ -673,10 +675,12 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
       ind <- readline(prompt = paste0("choose a product (number in the range 1 - ", nrow(dslist),"): "))
       dslist <- dslist[ind,]
     }
+    else dslist <- dslist[pick_layers[currentPar],]
     
     # this object will have a dataframe $df and a logfile $log, the dataframe has several verbose columns pointing to the nearest lat,lon,time and depth found in the requested data set    
     extracted=CombineC(extracted, lookupParameter(dslist=dslist,usePar=parameter,pts=pts,atDepth=8) )
     
+    sources = c(sources,dslist$title)
   }
    
 
@@ -705,102 +709,14 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
   #clean up
   rm(pts)
   
+  print(paste0("Extraction done. The following datasets were used: ", paste(sources, collapse = ", ")))
   return(inputPoints)
   
 }
 
-
-getRasterSlice <- function(requestedParameter, lon_min, lon_max, lat_min, lat_max, requestedTimeSteps = NULL, date, atDepth = NULL, stacCatalogue) {
-  
-  if(is.null(atDepth)) atDepth=0
-  inputPoints$Time = as.POSIXct(inputPoints$Time, tz="UTC")
-  
-  date <- as.POSIXct(date, format = "%Y-%m-%d")
-  
-  if(is.na(date))  dbl("failed to recognise date format, please use format %Y-%m-%d")
-  
-  #do not use geoChunked data (R cannot read these very well as rasters)
-  dslist=dplyr::filter(stacCatalogue, par==requestedParameter & 
-                         latmin <= lat_min & 
-                         latmax >= lat_max & 
-                         lonmin <= lon_min & 
-                         lonmax >= lon_max &
-                         chunktype %in% c('timeChunked','chunked'))
-  
-  #if the variable is categorical, do not filter based on start and end time (should be changed to dynamic vs static variable in future)
-  if(dslist$categories[1] %in% c(NA,0))    dslist=dplyr::filter(dslist, start_datetime <= date & end_datetime >= date) 
-  
-  # if a prefered timestep specified, use it
-  if(! is.null(requestedTimeSteps))
-  {
-    tlist=dplyr::filter(dslist, timestep %in% requestedTimeSteps)
-    if(nrow(tlist)>0) dslist=tlist
-  }
-  
-  if(nrow(dslist) > 1) {
-    dbl("Multiple options are available for your input parameters:")
-    
-    print(dslist %>% dplyr::select(title, latmin, latmax, lonmin, lonmax, latstep, lonstep, timestep, start_datetime, end_datetime))
-    
-    ind <- readline(prompt = paste0("choose a product (number in the range 1 - ", nrow(dslist),"): "))
-    dslist <- dslist[ind,]
-  }
-  
-  zinfo=getLastInfoFromZarr(dslist$href[1], dslist$ori[1])
-  
-  dsn=toGDAL(zinfo$href)
-  
-  #check if parameter is available in zarr file
-  if(requestedParameter %in% names(zinfo$meta$arrays)) 
-    sdsn=sprintf('%s:/%s',dsn,requestedParameter)
-  
-  closest_time=NULL
-  #is there a time component
-  if('time' %in% zinfo$meta$dimensions$name & !is.null(zinfo$times))
-  {
-    if(length(zinfo$times) > 1)
-    {  
-      closest_time=closest(zinfo$times,date)
-      
-      sdsn=sprintf('%s:%s',sdsn,max(closest_time-1,1))
-    }
-  }
-  
-  #is the data in several depth or elevation levels
-  closest_level=NULL
-  if('elevation' %in% zinfo$meta$dimensions$name & !is.null(zinfo$levels) )
-  { 
-    if(length(zinfo$levels) > 1)
-    {
-      closest_level=closest(zinfo$levels,atDepth)
-      sdsn=sprintf('%s:%s',sdsn,max(closest_level-1,1) )
-      closest_level = zinfo$levels[closest_level]
-    }
-  }
-  
-  if(!is.null(zinfo$meta$attributes$Field)) {if(zinfo$meta$attributes$Field == "Seabed Habitats") {
-    r=rast(sdsn)
-    
-    r <- flip(r, direction="vertical")
-    
-    dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
-    crs(r)='epsg:4326'
-    ext(r)=c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1])
-    
-    r <- crop(r, ext(lon_min, lon_max, lat_min, lat_max))
-  }} else {
-    r=rast(sdsn)
-    dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
-    crs(r)='epsg:4326'
-    ext(r)=c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1])
-    
-    r <- crop(r, ext(lon_min, lon_max, lat_min, lat_max))
-  
-  } 
-  
-  return(r)
-}
-getRasterSlice2 <- function(requestedParameter='thetao', lon_min=-10, lon_max=10, lat_min=50, lat_max=60, requestedTimeSteps = NULL, date = NULL, atDepth = NULL, stacCatalogue) {
+getRasterSlice <- function(requestedParameter='thetao', lon_min=-10, lon_max=10, lat_min=50, lat_max=60, 
+                            requestedTimeSteps = NULL, date = NULL, atDepth = NULL, stacCatalogue, 
+                            pick_layers = NULL) {
   
   if(is.null(atDepth)) atDepth=0
   if(! is.null(date))
@@ -836,8 +752,7 @@ getRasterSlice2 <- function(requestedParameter='thetao', lon_min=-10, lon_max=10
   }
   
   
-  # we should try to avoid user interaction at this stage
-  if(nrow(dslist) > 1) {
+  if(is.null(pick_layers) & nrow(dslist) > 1) {
     dbl("Multiple options are available for your input parameters:")
     
     print(dslist %>% dplyr::select(title, latmin, latmax, lonmin, lonmax, latstep, lonstep, timestep, start_datetime, end_datetime))
@@ -845,6 +760,7 @@ getRasterSlice2 <- function(requestedParameter='thetao', lon_min=-10, lon_max=10
     ind <- readline(prompt = paste0("choose a product (number in the range 1 - ", nrow(dslist),"): "))
     dslist <- dslist[ind,]
   }
+  else dslist <- dslist[pick_layers,]
   
   zinfo=getLastInfoFromZarr(dslist$href[1], dslist$ori[1])
   

@@ -57,10 +57,11 @@ for ( parameter in parameters) {
 #add verbose= anything to get additional info on the positions ( par_x, par_y, par_z ) and time (par_t) found in the zarr files
 source("editoTools.R")
 enhanced_DF = enhanceDF(inputPoints = points,
-                         requestedParameters = parameters, 
-                         requestedTimeSteps = NA, 
-                         stacCatalogue = EDITOSTAC, 
-                         verbose="on")
+                        requestedParameters = parameters, 
+                        requestedTimeSteps = NA, 
+                        stacCatalogue = EDITOSTAC, 
+                        verbose="on",
+                        pick_layers = rep(1,4))
 
 
 #1,1,1,1
@@ -228,100 +229,17 @@ r <- getRasterSlice(requestedParameter = "elevation",
                     date = "2020-01-01",
                     stacCatalogue = EDITOSTAC)
 
-r2 <- getRasterSlice(requestedParameter = "Energy",
-                     lon_min = -13,
-                     lon_max = 10,
-                     lat_min = 40,
-                     lat_max = 60,
-                     requestedTimeSteps = NA,
-                     date = "2020-01-01",
-                     stacCatalogue = EDITOSTAC)
+# with predefined user input
+r <- getRasterSlice(requestedParameter = "elevation",
+                    lon_min = -13,
+                    lon_max = 10,
+                    lat_min = 40,
+                    lat_max = 60,
+                    requestedTimeSteps = NA,
+                    date = "2020-01-01",
+                    stacCatalogue = EDITOSTAC,
+                    pick_layers = 1)
 
-r3 <- getRasterSlice(requestedParameter = "thetao",
-                     lon_min = -13,
-                     lon_max = 10,
-                     lat_min = 50,
-                     lat_max = 60,
-                     requestedTimeSteps = NA,
-                     date = "2020-12-01",
-                     stacCatalogue = EDITOSTAC)
-plot(r3)
-
-r3 <- getRasterSlice2(requestedParameter = "phyc",
-                     lon_min = -13,
-                     lon_max = 10,
-                     lat_min = 50,
-                     lat_max = 60,
-                     requestedTimeSteps = NA,
-                     date = "2020-12-01",
-                     stacCatalogue = EDITOSTAC)
-plot(r3)
-
-
-
-par(mfrow = c(1,3))
 plot(r)
-plot(r2)
-
-
-getRasterSlice2("zooc",
-                stacCatalogue = EDITOSTAC,
-                lon_min = -12,
-                lon_max = 10,
-                lat_min = 48,
-                lat_max = 62,
-                requestedTimeSteps = NA,
-                date = "2020-01-01")
-
-
-
-#5. edit EDITOSTAC ----
-
-parameters= list("Energy"= c("par" = "Energy",
-                             "fun" = "most_freq",
-                             "buffer" = "10000"),
-                 "Substrate"= c("par" = "Substrate",
-                                "fun" = "most_freq",
-                                "buffer"= "10000"))
-
-parameters= list("thetao"= c("par" = "thetao",
-                                "fun" = "mean",
-                                "buffer"= "10000"))
-
-EDITOSTAC2 <- EDITOSTAC %>% 
-  add_row(asset = "zarr_data",
-          par = "marine_strategy_framework_directive_benthic_broad_habitat_type",
-          href = "https://s3.waw3-1.cloudferro.com/emodnet/emodnet_arco/emodnet_seabed_habitats/emodnet_broad_scale_seabed_habitat_map_for_europe_euseamap/EUSeaMap_2023_EUSeaMap_2023_res0.01.zarr",
-          title = "EUSeaMap_2023",
-          latmin = 22.93,
-          latmax = 82.96,
-          lonmin = -36.0,
-          lonmax = 43.0,
-          chunktype = "chunked",
-          catalogue = "EMODNET",
-          categories = 123) %>%
-  add_row(asset = "zarr_data",
-          par = "seabed_energy",
-          href = "https://s3.waw3-1.cloudferro.com/emodnet/emodnet_arco/emodnet_seabed_habitats/emodnet_broad_scale_seabed_habitat_map_for_europe_euseamap/EUSeaMap_2023_EUSeaMap_2023_res0.01.zarr",
-          title = "EUSeaMap_2023",
-          latmin = 22.93,
-          latmax = 82.96,
-          lonmin = -36.0,
-          lonmax = 43.0,
-          chunktype = "chunked",
-          catalogue = "EMODNET",
-          categories = 123)
-
-
-
-
-source("editoTools_no_flip.R") #no flip, no lat transform
-enhanced_DF = enhanceDF(inputPoints = points,
-                        requestedParameters = parameters, 
-                        requestedTimeSteps = NA, 
-                        stacCatalogue = EDITOSTAC2, 
-                        verbose="on")
-
-glimpse(enhanced_DF)
 
 
