@@ -194,7 +194,7 @@ Traditionally, this is proceeded by a cumbersome process of looking for and down
 
 The spatial resolution of environmental variables should match the resolution of the species records during species distribution modelling [@sillero2021common]. To solve this, environmental maps are traditionally resampled to the same resolution as the species records. The extraction method from .zarr files on EDITO allows the user to provide a buffer. When a buffer is provided, environmental values are not only extracted at the requested longitude, latitude and time coordinate but from all cells within the specified buffer around the location. Next, a user specified function (i.e. mean, max, min, median) is applied to these values to summarize this information into one value for each requested longitude, latitude and time coordinate. This way, an uncertainty is added to the location of the occurrence / (pseudo-)absence / background point. In this example, we apply a buffer of 10 NM, which is the resolution of the occurrence data.
 
-```{r step 5, eval = FALSE}
+```{r step 5, eval = TRUE, results='hide'}
 load("zarr_extraction/SAVE/absences_save.Rdata")
 
 #combine occurrences and background points
@@ -225,18 +225,15 @@ df_occ_bg_env = enhanceDF(inputPoints = df_occ_bg %>%
                           requestedParameters = parameters,
                           requestedTimeSteps = NA,
                           stacCatalogue = EDITOSTAC,
-                          verbose="on")
-
-glimpse(df_occ_bg_env)
+                          verbose="on",
+                          pick_layers = rep(1,4))
 
 df_occ_bg_env <- df_occ_bg_env %>% dplyr::select(presence, Longitude, Latitude, year, month,
                                                  thetao, so, zooc, phyc)
 
 # remove observations where no environmental values were present
 df_occ_bg_env <- drop_na(df_occ_bg_env)
-table(df_occ_bg_env$presence)
-#    0    1 
-# 8038 3991
+
 
 
 # ## TODO remove this part ----
@@ -257,11 +254,17 @@ table(df_occ_bg_env$presence)
 save(df_occ_bg_env, file = "zarr_extraction/SAVE/pres_abs_env_save_EditoTools.Rdata")
 ```
 
+``` {r step 5.2}
+table(df_occ_bg_env$presence)
+#    0    1 
+# 8038 3991
+```
+
 ## 1.6 Model creation using ENMeval
 
 Maxent can be tailored by combining different feature classes and regularization multipliers [@phillips2006modelling]. Fifteen combinations were tested using the corrected Akaike's Information Criterion (AICc) as a selection criterion [@zeng2016novel].
 
-```{r step 6, eval = FALSE}
+```{r step 6, eval = TRUE}
 load(file = "zarr_extraction/SAVE/pres_abs_env_save_EditoTools.Rdata")
 
 glimpse(df_occ_bg_env)
@@ -376,7 +379,7 @@ Finally, we want to make spatial predictions for the habitat suitability in the 
 
 First, maps are derived from the .zarr files in the datalake at a given time and between a set of longitude and latitudes (defined by the study area).
 
-```{r step 8}
+```{r step 8, results='hide'}
 variables <- c("thetao", "so", "phyc", "zooc")
 
 # files <- tibble(name = list.files("data/raster_slices/", pattern = ".tif|.grd", full.names = TRUE),
@@ -389,32 +392,38 @@ opt.aicc <- eval.results(model_fit) %>% filter(delta.AICc == 0)
 mod <- eval_res@models[[which(names(eval_res@models) == opt.aicc$tune.args)]]
 
 raster_list <- list()
-
-for (d in c("2019-09-01", "2019-10-01", "2019-12-01", "2020-01-01")) {
+st <- list()
+for (d in 1:4) {
   for (i in 1:length(variables)) {
-  raster_list[[d]][[i]] <- getRasterSlice2(variables[i],
+  raster_list[[i]] <- getRasterSlice(variables[i],
                                       stacCatalogue = EDITOSTAC,
                                       lon_min = -12,
                                       lon_max = 10,
                                       lat_min = 48,
                                       lat_max = 62,
                                       requestedTimeSteps = NA,
-                                      date = d)}
+                                      date = c("2019-09-01", "2019-10-01", "2019-12-01", "2020-01-01")[d],
+                                      pick_layers = 1)
+  }
+  resolutions <- sapply(raster_list, res, simplify = TRUE)
+  coarsest_resolution <- resolutions[, which.max(apply(resolutions, 2,
+                                                       function(x) max(x,
+                                                                       na.rm= TRUE)))]
+  #This is the common most coarse resolution
+  coarsest_resolution
+  r_coarsest_resolution <- raster_list[[which.max(apply(resolutions, 2, function(x) max(x, na.rm = TRUE)))]]
+  
+  l <- lapply(raster_list, FUN = function(x) raster(resample(x, r_coarsest_resolution)))
+  st[[d]] <- stack(l)
+  names(st[[d]]) <- variables
+  
 }
 
-resolutions <- sapply(raster_list, res, simplify = TRUE)
-coarsest_resolution <- resolutions[, which.max(apply(resolutions, 2, function(x) max(x, na.rm = TRUE)))]
+```
 
-#This is the common most coarse resolution
-coarsest_resolution
-r_coarsest_resolution <- raster_list[[which.max(apply(resolutions, 2, function(x) max(x, na.rm = TRUE)))]]
 
-l <- lapply(raster_list, FUN = function(x) raster(resample(x, r_coarsest_resolution)))
-st <- stack(l)
-names(st) <- variables
-
-plot(st)
-
+```{r step 8.2}
+plot(st[[1]])
 ```
 
 ## 3.2 Spatial predictions
@@ -424,12 +433,12 @@ Spatial predictions are restricted to the months were occurrence data of herring
 ```{r step 9}
 
 predictions <- stack()
-for (m in unique(df_occ_bg_env$month)) {
-  pred_m <- predict(st, mod, clamp=T, type="cloglog")
+for (d in 1:4) {
+  pred_m <- predict(st[[d]], mod, clamp=T, type="cloglog")
   # crop to extent of study area
   pred_m <- crop(pred_m, extent(-12, 10, 48, 62))
   
-  names(pred_m) <- paste0("prediction_", month.name[m])
+  names(pred_m) <- paste0("prediction_", c("2019-09-01", "2019-10-01", "2019-12-01", "2020-01-01")[d])
   
   predictions <- stack(predictions, pred_m)
 }
