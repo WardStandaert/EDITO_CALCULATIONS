@@ -580,7 +580,7 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
 }
 
 
-enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCatalogue, verbose="", pick_layers = NULL)
+enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCatalogue, verbose="", select_layers = NULL)
 {
 
   #we need to group the sampling points to reduce the data lookups
@@ -667,7 +667,7 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     
     #add time filter here (see lookupParameter function)
     
-    if(is.null(pick_layers) & nrow(dslist) > 1) {
+    if(is.null(select_layers) & nrow(dslist) > 1) {
       dbl("Multiple options are available for your input parameters:")
 
       print(dslist %>% dplyr::select(title, latmin, latmax, lonmin, lonmax, latstep, lonstep, timestep, start_datetime, end_datetime, chunktype))
@@ -675,7 +675,7 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
       ind <- readline(prompt = paste0("choose a product (number in the range 1 - ", nrow(dslist),"): "))
       dslist <- dslist[ind,]
     }
-    else dslist <- dslist[pick_layers[currentPar],]
+    else dslist <- dslist[select_layers[currentPar],]
     
     # this object will have a dataframe $df and a logfile $log, the dataframe has several verbose columns pointing to the nearest lat,lon,time and depth found in the requested data set    
     extracted=CombineC(extracted, lookupParameter(dslist=dslist,usePar=parameter,pts=pts,atDepth=8) )
@@ -716,7 +716,7 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
 
 getRasterSlice <- function(requestedParameter='thetao', lon_min=-10, lon_max=10, lat_min=50, lat_max=60, 
                             requestedTimeSteps = NULL, date = NULL, atDepth = NULL, stacCatalogue, 
-                            pick_layers = NULL) {
+                            select_layers = NULL) {
   
   if(is.null(atDepth)) atDepth=0
   if(! is.null(date))
@@ -752,7 +752,7 @@ getRasterSlice <- function(requestedParameter='thetao', lon_min=-10, lon_max=10,
   }
   
   
-  if(is.null(pick_layers) & nrow(dslist) > 1) {
+  if(is.null(select_layers) & nrow(dslist) > 1) {
     dbl("Multiple options are available for your input parameters:")
     
     print(dslist %>% dplyr::select(title, latmin, latmax, lonmin, lonmax, latstep, lonstep, timestep, start_datetime, end_datetime))
@@ -760,7 +760,7 @@ getRasterSlice <- function(requestedParameter='thetao', lon_min=-10, lon_max=10,
     ind <- readline(prompt = paste0("choose a product (number in the range 1 - ", nrow(dslist),"): "))
     dslist <- dslist[ind,]
   }
-  else dslist <- dslist[pick_layers,]
+  else dslist <- dslist[select_layers,]
   
   zinfo=getLastInfoFromZarr(dslist$href[1], dslist$ori[1])
   

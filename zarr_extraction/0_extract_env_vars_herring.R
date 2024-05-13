@@ -61,7 +61,7 @@ enhanced_DF = enhanceDF(inputPoints = points,
                         requestedTimeSteps = NA, 
                         stacCatalogue = EDITOSTAC, 
                         verbose="on",
-                        pick_layers = rep(1,4))
+                        select_layers = rep(1,length(parameters)))
 
 
 #1,1,1,1
@@ -238,7 +238,7 @@ r <- getRasterSlice(requestedParameter = "elevation",
                     requestedTimeSteps = NA,
                     date = "2020-01-01",
                     stacCatalogue = EDITOSTAC,
-                    pick_layers = 1)
+                    select_layers = 1)
 
 plot(r)
 
