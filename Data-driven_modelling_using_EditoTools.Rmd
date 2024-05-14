@@ -204,7 +204,7 @@ glimpse(df_occ_bg)
 
 
 source("zarr_extraction/editoTools.R")
-options("outputdebug"=c('L','M'))
+options("outputdebug"=NULL)
 load(file = "zarr_extraction/editostacv2.par")
 
 ##TODO: ADD ELEVATION, WINDFARMS AND SEABED SUBSTRATE ENERGY ------
@@ -226,7 +226,7 @@ df_occ_bg_env = enhanceDF(inputPoints = df_occ_bg %>%
                           requestedTimeSteps = NA,
                           stacCatalogue = EDITOSTAC,
                           verbose="on",
-                          pick_layers = rep(1,4))
+                          select_layers = rep(1,4))
 
 df_occ_bg_env <- df_occ_bg_env %>% dplyr::select(presence, Longitude, Latitude, year, month,
                                                  thetao, so, zooc, phyc)
@@ -403,7 +403,7 @@ for (d in 1:4) {
                                       lat_max = 62,
                                       requestedTimeSteps = NA,
                                       date = c("2019-09-01", "2019-10-01", "2019-12-01", "2020-01-01")[d],
-                                      pick_layers = 1)
+                                      select_layers = 1)
   }
   resolutions <- sapply(raster_list, res, simplify = TRUE)
   coarsest_resolution <- resolutions[, which.max(apply(resolutions, 2,
