@@ -194,7 +194,7 @@ Traditionally, this is proceeded by a cumbersome process of looking for and down
 
 The spatial resolution of environmental variables should match the resolution of the species records during species distribution modelling [@sillero2021common]. To solve this, environmental maps are traditionally resampled to the same resolution as the species records. The extraction method from .zarr files on EDITO allows the user to provide a buffer. When a buffer is provided, environmental values are not only extracted at the requested longitude, latitude and time coordinate but from all cells within the specified buffer around the location. Next, a user specified function (i.e. mean, max, min, median) is applied to these values to summarize this information into one value for each requested longitude, latitude and time coordinate. This way, an uncertainty is added to the location of the occurrence / (pseudo-)absence / background point. In this example, we apply a buffer of 10 NM, which is the resolution of the occurrence data.
 
-```{r step 5, eval = TRUE, results='hide'}
+```{r step 5, eval = FALSE, results='hide'}
 load("zarr_extraction/SAVE/absences_save.Rdata")
 
 #combine occurrences and background points
@@ -255,6 +255,7 @@ save(df_occ_bg_env, file = "zarr_extraction/SAVE/pres_abs_env_save_EditoTools.Rd
 ```
 
 ``` {r step 5.2}
+load("zarr_extraction/SAVE/pres_abs_env_save_EditoTools.Rdata")
 table(df_occ_bg_env$presence)
 #    0    1 
 # 8038 3991
@@ -264,7 +265,7 @@ table(df_occ_bg_env$presence)
 
 Maxent can be tailored by combining different feature classes and regularization multipliers [@phillips2006modelling]. Fifteen combinations were tested using the corrected Akaike's Information Criterion (AICc) as a selection criterion [@zeng2016novel].
 
-```{r step 6, eval = TRUE}
+```{r step 6, eval = FALSE}
 load(file = "zarr_extraction/SAVE/pres_abs_env_save_EditoTools.Rdata")
 
 glimpse(df_occ_bg_env)
@@ -380,6 +381,9 @@ Finally, we want to make spatial predictions for the habitat suitability in the 
 First, maps are derived from the .zarr files in the datalake at a given time and between a set of longitude and latitudes (defined by the study area).
 
 ```{r step 8, results='hide'}
+source("zarr_extraction/editoTools.R")
+load(file = "zarr_extraction/editostacv2.par")
+
 variables <- c("thetao", "so", "phyc", "zooc")
 
 # files <- tibble(name = list.files("data/raster_slices/", pattern = ".tif|.grd", full.names = TRUE),

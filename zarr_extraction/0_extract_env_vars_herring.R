@@ -37,6 +37,14 @@ parameters = list("thetao"= c("par" = "thetao",
                             "fun" = "mean",
                             "buffer" = "10000"))
 
+parameters = list("zooc"= c("par" = "zooc",
+                            "fun" = "mean",
+                            "buffer" = "10000",
+                            "convert_from_timestep" = 86400000),
+                  "phyc"= c("par" = "phyc",
+                            "fun" = "mean",
+                            "buffer" = "10000"))
+
 # parameters= list("Energy"= c("par" = "Energy", 
 #                              "fun" = "most_freq", 
 #                              "buffer" = "10000"),
@@ -61,7 +69,8 @@ enhanced_DF = enhanceDF(inputPoints = points,
                         requestedTimeSteps = NA, 
                         stacCatalogue = EDITOSTAC, 
                         verbose="on",
-                        select_layers = rep(1,length(parameters)))
+                        select_layers = rep(1,length(parameters)),
+                        atDepth = 20)
 
 
 #1,1,1,1
@@ -239,6 +248,15 @@ r <- getRasterSlice(requestedParameter = "elevation",
                     date = "2020-01-01",
                     stacCatalogue = EDITOSTAC,
                     select_layers = 1)
+
+# with predefined user input
+r <- getRasterSlice(requestedParameter = "Substrate",
+                    lon_min = -13,
+                    lon_max = 10,
+                    lat_min = 40,
+                    lat_max = 60,
+                    requestedTimeSteps = NA,
+                    stacCatalogue = EDITOSTAC)
 
 plot(r)
 

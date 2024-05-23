@@ -580,7 +580,7 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
 }
 
 
-enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCatalogue, verbose="", select_layers = NULL)
+enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCatalogue, verbose="", atDepth = NA, select_layers = NULL)
 {
 
   #we need to group the sampling points to reduce the data lookups
@@ -674,11 +674,10 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
       
       ind <- readline(prompt = paste0("choose a product (number in the range 1 - ", nrow(dslist),"): "))
       dslist <- dslist[ind,]
-    }
-    else dslist <- dslist[select_layers[currentPar],]
+    } else if(!is.null(select_layers)) dslist <- dslist[select_layers[currentPar],]
     
     # this object will have a dataframe $df and a logfile $log, the dataframe has several verbose columns pointing to the nearest lat,lon,time and depth found in the requested data set    
-    extracted=CombineC(extracted, lookupParameter(dslist=dslist,usePar=parameter,pts=pts,atDepth=8) )
+    extracted=CombineC(extracted, lookupParameter(dslist=dslist,usePar=parameter,pts=pts,atDepth=atDepth) )
     
     sources = c(sources,dslist$title)
   }
@@ -760,7 +759,7 @@ getRasterSlice <- function(requestedParameter='thetao', lon_min=-10, lon_max=10,
     ind <- readline(prompt = paste0("choose a product (number in the range 1 - ", nrow(dslist),"): "))
     dslist <- dslist[ind,]
   }
-  else dslist <- dslist[select_layers,]
+  else if(!is.null(select_layers))  dslist <- dslist[select_layers,]
   
   zinfo=getLastInfoFromZarr(dslist$href[1], dslist$ori[1])
   
