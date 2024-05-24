@@ -193,8 +193,6 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
   
   r=rast(sdsn)
 
-  if(isCategory)  r=flip(r, "vertical")
-
   if(crs(r)=="") {
     dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
     crs(r)='epsg:4326'
@@ -203,8 +201,7 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
   
   parTabel=dplyr::tibble()
   
-
- try({
+  try({
  
    #simple extract function if there is no buffer provided
    if(!"buffer" %in% names(params)) {
@@ -215,11 +212,44 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
        bufferedY = terra::buffer(vect(cbind(coords$x, coords$y), crs="+proj=longlat"), bufferSize)
        
        # derive the most frequent category for categorical variables
-       if(isCategory) {
+       if(isCategory & fun == "most_freq") {
          dbl("using most frequent value in buffer to look up categorical data")
          
          par2 = terra::extract(x=r, y=bufferedY, table , na.rm=T)
          parTabel = cbind(as.numeric(colnames(par2)[max.col(par2)]), dplyr::select(coords,x,y))
+       } else if(isCategory & fun == "table") {
+         dbl("providing all categories in buffer to look up categorical data")
+         
+         #using table lookup
+         parTabel = cbind(terra::extract(x=r, y=bufferedY, fun, na.rm=T, ID= F),
+                          dplyr::select(coords,x,y))
+         
+         #convert to percentages
+         vals = parTabel[, !colnames(parTabel) %in% c("x","y")]
+         #if only one category is present directly assign 100%
+         if(!is.data.frame(vals) & !any(is.na(vals))) {
+           vals = 1
+           names(vals) = names(parTabel[1])
+           }
+         else vals = round(vals / rowSums(vals), 2)
+         #create an empty data frame with a column for each category of the parameter 
+         catdesc=zinfo$meta$attributes[[param]]
+         
+         if(all(is.na(match(names(vals), catdesc)))) names(vals) = "unknown"
+         else {
+           names(vals) = names(catdesc)[match(names(vals), catdesc)]
+           names(vals)[is.na(names(vals))] = "unknown"
+         }
+         
+         full_table = data.frame(matrix(nrow = nrow(coords), ncol = length(catdesc) + 1, data = 0))
+         colnames(full_table) = c(names(catdesc),"unknown")
+         
+         #add the percentages from this iteration to the empty data frame
+         #(empty columns will be removed after looping through all points)
+         full_table[,names(vals)] <- vals
+         parTabel = cbind(full_table, parTabel[,c("x","y")])
+         
+         
        } else if (!"convert_from_timestep" %in% names(params)) {
          dbl("using buffer to look up data")
          
@@ -254,7 +284,9 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
       parTabel$DataTime = zinfo$times[closest_time]
       cn=c(cn,'_t')
     }  
-    colnames(parTabel)<-c(sprintf("%s%s",param,cn))
+    if(length(cn) == length(colnames(parTabel))) colnames(parTabel) = c(sprintf("%s%s",param,cn))
+    #when table function was called, only replace the names of the last columns with coordinates
+    else colnames(parTabel)[(ncol(parTabel)-length(cn)+2):ncol(parTabel)] = c(sprintf("%s%s",param,cn[-1]))
   }
   return(parTabel)
 }
@@ -553,9 +585,11 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
         tble=dplyr::rename(tble, any_of(lookup))
         tble
       }
+    #remove any column that only contains zeros when using table extraction for categorical variables
+    if(isCategory & "table" %in% params) resulting = resulting %>% select(where(~ any(. != 0)))
     dbl("terra extracted tble: ", nrow(resulting))
     
-    
+
   }  
   resulting = cbind(pts,  resulting  )
   
@@ -566,7 +600,7 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
   names(newpiece)=c(param)
  
   #for category data, add the description found in the zarr meta data
-  if(!dslist$categories[1] %in% c(NA,0))
+  if(!dslist$categories[1] %in% c(NA,0) & params[["fun"]] != "table")
   {
     catdesc=zinfo$meta$attributes[[param]]
     resulting[[paste0(param,"_Description")]]=ifelse(resulting[[param]] %in% catdesc,  names(catdesc)[match(resulting[[param]], catdesc)] ,'NA')
@@ -797,8 +831,6 @@ getRasterSlice <- function(requestedParameter='thetao', lon_min=-10, lon_max=10,
   
   
   r=rast(sdsn)
-  # temporary hack
-  if(str_detect( zinfo$href, "euseamap")) r=flip(r,direction="vertical")
   
   dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
   crs(r)='epsg:4326'

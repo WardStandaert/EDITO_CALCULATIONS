@@ -37,13 +37,9 @@ parameters = list("thetao"= c("par" = "thetao",
                             "fun" = "mean",
                             "buffer" = "10000"))
 
-parameters = list("zooc"= c("par" = "zooc",
-                            "fun" = "mean",
-                            "buffer" = "10000",
-                            "convert_from_timestep" = 86400000),
-                  "phyc"= c("par" = "phyc",
-                            "fun" = "mean",
-                            "buffer" = "10000"))
+parameters = list("Substrate"= c("par" = "Substrate",
+                                 "fun" = "table",
+                                 "buffer" = "10000"))
 
 # parameters= list("Energy"= c("par" = "Energy", 
 #                              "fun" = "most_freq", 
@@ -260,4 +256,8 @@ r <- getRasterSlice(requestedParameter = "Substrate",
 
 plot(r)
 
-
+#does not work
+extract(r, terra::buffer(vect(cbind(c(0,0),c(40,50)), crs="+proj=longlat"), mean, width = 100))
+#works
+tab = table(terra::extract(r, terra::buffer(vect(cbind(c(0,0),c(40,50)), crs="+proj=longlat"), width = 10000)))
+round(tab / rowSums(tab), 2)
