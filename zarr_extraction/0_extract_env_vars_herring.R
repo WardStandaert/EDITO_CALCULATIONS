@@ -23,24 +23,26 @@ timeSteps=c(2629746000)
 
 
 #the requested parameters, names in the stac catalogue table field 'par' .. see unique(stacCatalogue$par) for a list 
-parameters = list("thetao"= c("par" = "thetao",
-                              "fun" = "mean",
-                              "buffer" = "10000"),
-                  "so"= c("par" = "so",
-                          "fun" = "mean",
-                          "buffer" = "10000"),
-                  "zooc"= c("par" = "zooc",
+parameters = list("zooc"= c("par" = "zooc",
                             "fun" = "mean",
                             "buffer" = "10000",
                             "convert_from_timestep" = 86400000),
                   "phyc"= c("par" = "phyc",
                             "fun" = "mean",
-                            "buffer" = "10000"))
+                            "buffer" = "10000"),
+                  "thetao"= c("par" = "thetao",
+                              "fun" = "mean",
+                              "buffer" = "10000"),
+                  "so"= c("par" = "so",
+                          "fun" = "mean",
+                          "buffer" = "10000"))
 
 parameters = list("Substrate"= c("par" = "Substrate",
                                  "fun" = "table",
                                  "buffer" = "10000"))
-
+parameters = list("elevation"= c("par" = "elevation",
+                                 "fun" = "mean",
+                                 "buffer" = "100"))
 # parameters= list("Energy"= c("par" = "Energy", 
 #                              "fun" = "most_freq", 
 #                              "buffer" = "10000"),
