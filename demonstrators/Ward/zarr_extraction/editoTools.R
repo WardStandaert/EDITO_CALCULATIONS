@@ -622,8 +622,6 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     
     param = ifelse(length(parameter)==1, parameter, parameter[[1]])
     
-    
-    dbl()
     dbl("par:",param)
     
     #check available zarr assets in the stack catalogue for the region and period in the data file
