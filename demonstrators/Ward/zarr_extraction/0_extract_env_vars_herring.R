@@ -113,6 +113,59 @@ plot(r)
 
 
 
+#test on selecting specific categorical variable
+parameters = list("seabed_energy"= c("par" = "seabed_energy",
+                              "fun" = "table",
+                              "buffer" = "10000"))
+EDITOSTAC[which(EDITOSTAC$par == "Energy" & EDITOSTAC$asset == "Zarr"),c("latmin","latmax","lonmin","lonmax")] <- matrix(data = c(48,62,-12,10), nrow = 1)
+EDITOSTAC[which(EDITOSTAC$par == "Energy" & EDITOSTAC$asset == "Zarr"),c("latmin","latmax","lonmin","lonmax")] <- matrix(data = c(48,62,-12,10), nrow = 1)
+EDITOSTAC[which(EDITOSTAC$par == "Energy" & EDITOSTAC$asset == "Zarr"),"par"] <- "seabed_energy"
+enhanced_DF_depth = enhanceDF(inputPoints = points,
+                              requestedParameters = parameters, 
+                              requestedTimeSteps = NA, 
+                              stacCatalogue = EDITOSTAC, 
+                              verbose="on",
+                              atDepth = 20)
+
+r <- getRasterSlice(requestedParameter = "seabed_energy",
+                    lon_min = -12,
+                    lon_max = 10,
+                    lat_min = 48,
+                    lat_max = 62,
+                    requestedTimeSteps = NA,
+                    date = "2020-01-01",
+                    stacCatalogue = EDITOSTAC)
+plot(r)
+
+#does not work if no period is provided. would work once monthly data is not represented as NA anymore
+new_pts <- tibble(Longitude = c(0,2,4,6,8),
+                  Latitude = c(50,50,50,50,50),
+                  Time = rep(as.POSIXct("2020-01-01",tz = "UTC")))
+
+enhanced_DF = enhanceDF(inputPoints = new_pts,
+                              requestedParameters = list("seabed_energy"= c("par" = "seabed_energy",
+                                                                            "fun" = "most_frequent",
+                                                                            "buffer" = "50000")), 
+                              requestedTimeSteps = NA, 
+                              stacCatalogue = EDITOSTAC, 
+                              verbose="on",
+                              atDepth = 0)
+enhanced_DF$seabed_energy
+# [1] 3 3 4 4 2
+
+#try an exact match with category 3 (e.g. species likes to be close to corals)
+enhanced_DF = enhanceDF(inputPoints = new_pts,
+                        requestedParameters = list("seabed_energy"= c("par" = "seabed_energy",
+                                                                      "fun" = "exact",
+                                                                      "category" = "3",
+                                                                      "buffer" = "50000")), 
+                        requestedTimeSteps = NA, 
+                        stacCatalogue = EDITOSTAC, 
+                        verbose="on",
+                        atDepth = 0)
+enhanced_DF$seabed_energy
+# [1] 3 3 4 4 2
+
 ## Compare with original extraction  ----
 ### Numerical variables ----
 par(mfrow = c(3,2))

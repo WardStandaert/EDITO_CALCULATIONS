@@ -166,7 +166,7 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
   
   r=rast(sdsn)
   
-  if(isCategory)  r=flip(r, "vertical")
+  # if(isCategory)  r=flip(r, "vertical")
   
   if(crs(r)=="") {
     dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
@@ -179,36 +179,60 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
   
   try({
     
-    #simple extract function if there is no buffer provided
+    #1. no buffer is provided
     if(!"buffer" %in% names(params)) {
       parTabel=terra::extract(x = r, y = dplyr::select(coords,x,y), ID= F, xy=T) 
-    } else {  #if buffer value is provided
+    } 
+    #2. buffer value is provided
+    else {  
       bufferSize = as.numeric(params[["buffer"]])
       fun = params[["fun"]]
       bufferedY = terra::buffer(vect(cbind(coords$x, coords$y), crs="+proj=longlat"), bufferSize)
       
+      # categorical variable
       # derive the most frequent category for categorical variables
       if(isCategory) {
-        dbl("using most frequent value in buffer to look up categorical data")
-        
-        par2 = terra::extract(x=r, y=bufferedY, table , na.rm=T)
-        parTabel = cbind(as.numeric(colnames(par2)[max.col(par2)]), dplyr::select(coords,x,y))
-      } else if (!"convert_from_timestep" %in% names(params)) {
-        dbl("using buffer to look up data")
-        
-        parTabel = cbind(terra::extract(x=r, y=bufferedY, fun, na.rm=T, ID= F),
-                         dplyr::select(coords,x,y))
-      } else {
-        #an averaging needs to be done towards a more coarse timestep
-        for(d in 1:lubridate::days_in_month(atTime)) {
-          closest_time=closest(zinfo$times,atTime + lubridate::days(d) - 1)
-          sdsn_d=sprintf('%s:%s',sdsn_par,max(closest_time-1,1))
-          r_d = rast(sdsn_d)
-          if(d == 1) r = r_d
-          else r = c(r, r_d)
+        if(params[["fun"]] == "most_frequent") {
+          dbl("using most frequent value in buffer to look up categorical data")
+          
+          parTabel = cbind(as.numeric(colnames(par2)[max.col(par2)]), dplyr::select(coords,x,y))}
+        else if(params[["fun"]] == "exact") {
+          if(!"category" %in% names(params)) {
+            dbl("please provide a category to match to")
+            stop()
+          }
+          dbl("calculating percentage area in buffer matching provided category")
+          
+          par2 = terra::extract(x=r, y=bufferedY, table , na.rm=T)
+          row_sums <- rowSums(par2[, sapply(par2, is.numeric)])
+          par2_percent <- par2[, sapply(par2, is.numeric)] / row_sums
+          # select category that was asked for
+          
+          parTabel = cbind(par2_percent[,which(names(par2_percent) == params[["category"]])], 
+                           dplyr::select(coords,x,y))
         }
-        parTabel = cbind(rowMeans(terra::extract(x=r, y=bufferedY, fun, na.rm=T, ID= F)),
-                         dplyr::select(coords,x,y))
+      } 
+      # numerical variable
+      else {
+        # regular extraction with specified fun
+        if (!"convert_from_timestep" %in% names(params)) {
+          dbl("using buffer to look up data")
+          
+          parTabel = cbind(terra::extract(x=r, y=bufferedY, fun, na.rm=T, ID= F),
+                           dplyr::select(coords,x,y))
+        } 
+        # an averaging needs to be done towards a coarser time step before extraction
+        else {
+          for(d in 1:lubridate::days_in_month(atTime)) {
+            closest_time=closest(zinfo$times,atTime + lubridate::days(d) - 1)
+            sdsn_d=sprintf('%s:%s',sdsn_par,max(closest_time-1,1))
+            r_d = rast(sdsn_d)
+            if(d == 1) r = r_d
+            else r = c(r, r_d)
+          }
+          parTabel = cbind(rowMeans(terra::extract(x=r, y=bufferedY, fun, na.rm=T, ID= F)),
+                           dplyr::select(coords,x,y))
+        }
       }
     }
   }, silent=T)
