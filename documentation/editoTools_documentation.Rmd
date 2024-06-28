@@ -1,0 +1,70 @@
+---
+title: "Documentation editoTools"
+output: html_document
+date: "2024-06-14"
+---
+
+Hi, feel free to paste the documentation of your functions in here!
+
+
+# enhanceDF()
+
+**Description**\
+Function to download specific environmental variables related to the coordinates of your data points. 
+
+**Arguments**
+
+-   inputPoints: dataframe of your presences/absences with the columns "Latitude", "Longitude", and optionally "Time", "year", "month"
+-   requestedParameters: list of parameters with info on "par", "fun", "buffer", optionally "convert_from_timestep"
+-   requestedTimeSteps: number specifying the temporal resolution (e.g 86400000 for daily)
+-   stacCatalogue: STAC Catalogue containing the URL's to the datasets and metadata information
+-   verbose: "on" or "" , don't know exactly what it does now
+-   select_layers: a list of length n with n the number of parameters, need to choose for every parameter which datalayer you want to use in the case there is more than one. If left empty will need to choose one by one later in the workflow. 
+
+**Format**  
+A dataframe  
+**Details**  
+Depends on the function `lookupParameter()`
+**Value**  
+A dataframe consisting of the original inputPoints appended by columns of parameter values.  
+**Examples** 
+```{r, eval=FALSE}
+parameters <- list("thetao"= c("par" = "thetao", "fun" = "mean", "buffer" = "10000"),
+                  
+                   "so"= c("par" = "so", "fun" = "mean", "buffer" = "10000"),
+                  
+                  "npp"= c("par" = "npp", "fun" = "mean", "buffer" = "10000","convert_from_timestep" = "86400000"))
+
+df_occ_bg_env = enhanceDF(inputPoints = df_occs %>% 
+                            mutate(Time = as.POSIXct(paste(year,month,1,sep = "-"))),
+                          requestedParameters = parameters,
+                          requestedTimeSteps = NA,
+                          stacCatalogue = EDITOSTAC,
+                          verbose="on",
+                          select_layers=NULL)
+```
+
+# lookupParameter()
+
+**Description**\
+Gets as input a specific datalayer in the STAC (given by previous code in `enhanceDF()`), a specific parametername , the coordinates where to extract this value and optionally also a depth.
+
+**Arguments**
+
+-   dslist: 
+-   usePar: 
+-   pts: 
+-   atDepth: 
+
+
+**Format**  
+A dataframe  
+**Details**  
+Depends on the function `lookupParameter()`
+**Value**  
+A dataframe consisting of the original inputPoints appended by columns of parameter values.  
+**Examples** 
+```{r, eval=FALSE}
+
+```
+
