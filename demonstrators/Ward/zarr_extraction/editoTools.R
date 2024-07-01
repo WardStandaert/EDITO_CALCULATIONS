@@ -1,25 +1,17 @@
-#toolbox to interact with the edito data lake ARCO data
-#use enhanceDF() to extract data for a set  of records with the fields Latitude,Longitude,Time
-#set of functions to harvest the stac catalog of edito, and lookup info from the zarr metadata
-
-
 library(foreach)
 library(doParallel)
 library(stars)
-
-
 library(terra)
 library(magrittr)
 library(dplyr)
 library(Rarr)
 library(stringr)
 library(lubridate)
-
 library(arrow)
+
 
 #function used to specify an s3 client based on the path, and assuming anonymous access, 
 #required for the rarr functions because of a conflict with S3 credentails specified on the data lab virtual machines 
-
 s3_client <- function(endpoint) {paws.storage::s3(
   config = list(
     credentials = list(anonymous = TRUE), 
@@ -28,13 +20,8 @@ s3_client <- function(endpoint) {paws.storage::s3(
 )}
 
 
-acf <- S3FileSystem$create(
-  scheme = "https",
-  endpoint_override = "s3.waw3-1.cloudferro.com",
-  anonymous = T
-)
-
-
+#retrieve STAC catalog in EDITOSTAC
+acf <- S3FileSystem$create(scheme = "https", endpoint_override = "s3.waw3-1.cloudferro.com", anonymous = T)
 EDITOSTAC = arrow::open_dataset(acf$path("emodnet/edito_stac_cache.parquet")) %>% collect()
 
 
@@ -45,23 +32,22 @@ closest<-function(xv,sv){
 
 #wrap a gdal request string
 toGDAL<-function(fn,par=""){
-  
   if(par!="") url=sprintf('ZARR:"/vsicurl?list_dir=no&retry_delay=60&max_retry=3&url=%s":/%s',fn,par)
   else   url= sprintf('ZARR:"/vsicurl?list_dir=no&retry_delay=60&max_retry=3&url=%s"',fn)
   return(url)
 }
 
 
+#derive info
 gdalinfo<-function(fn,par=""){
   url=toGDAL(fn,par)
   jsonlite::fromJSON(gdal_utils('mdiminfo', url, quiet = T))
 }
 
 
-#function to track and report progress including from forked processes
+#track and report progress including from forked processes
 options("outputdebug"=c('L','M'))
 loglist=""
-
 dbl<-function(...){
   m=paste(Sys.time(), ":", ..., sep=" ", collapse= "\t") 
   if(...length()==0) loglist<<-""
@@ -70,24 +56,6 @@ dbl<-function(...){
   if("M" %in% getOption("outputdebug")) message(m)
 }
 
-
-#function to convert time to seconds since 1970-01-01
-num2dt<-function(n, unit='seconds since 1970-01-01'){
-  "hours since 1950-01-01"
-  
-  origin="1970-01-01"
-  if(stringr::str_detect(unit,"2000-01-01")) origin="2000-01-01"
-  else if(stringr::str_detect(unit,"1970-01-01")) origin="1970-01-01"
-  else if(stringr::str_detect(unit,"1950-01-01")) origin="1950-01-01"
-  
-  m=1
-
-  if(stringr::str_detect(unit,"milliseconds"  ))  m=1000
-  if(stringr::str_detect(unit,"hours"  ))         m=1/3600
-  if(stringr::str_detect(unit,"minutes"  ))       m=1/60
-  
-  return(as.POSIXct(n/m,origin=origin,tz='Z') )
-}
 
 #used in parallel processing; drop results of incomplete parameter instead of losing all data
 CombineC<-function(lx,ly)
@@ -383,7 +351,22 @@ getLastInfoFromZarr<-function(href,ori=NULL)
   #is there a time component
   if('time' %in% meta$dimensions$name)
   {
-    zi$times=num2dt( read_zarr_array(sprintf("%s%s", href, '/time' ), index=list(1:meta$arrays$time$dimension_size) , s3_client = s3_client(endpoint)) , meta$arrays$time$unit )
+    if(!is.character(meta$arrays$time$unit)) unit='seconds since 1970-01-01'
+    else unit=meta$arrays$time$unit 
+
+    origin="1970-01-01"
+    if(stringr::str_detect(unit,"2000-01-01")) origin="2000-01-01"
+    else if(stringr::str_detect(unit,"1970-01-01")) origin="1970-01-01"
+    else if(stringr::str_detect(unit,"1950-01-01")) origin="1950-01-01"
+    
+    m=1
+    if(stringr::str_detect(unit,"milliseconds"))  m=1000
+    if(stringr::str_detect(unit,"hours"))         m=1/3600
+    if(stringr::str_detect(unit,"minutes"))       m=1/60
+    
+    zi$times = as.POSIXct(read_zarr_array(sprintf("%s%s", href, '/time'), index=list(1:meta$arrays$time$dimension_size), s3_client = s3_client(endpoint))/m,
+                          origin=origin,
+                          tz='Z')
   }
   
   if('elevation' %in% meta$dimensions$name)
@@ -395,7 +378,7 @@ getLastInfoFromZarr<-function(href,ori=NULL)
   zi$meta=meta
   zi$href=href
   
-  return(zi )
+  return(zi)
 }
 
 
