@@ -10,7 +10,7 @@
 
 
 
-<meta name="date" content="2024-06-14" />
+<meta name="date" content="2024-07-01" />
 
 <title>Documentation editoTools</title>
 
@@ -350,7 +350,7 @@ display: none;
 
 
 <h1 class="title toc-ignore">Documentation editoTools</h1>
-<h4 class="date">2024-06-14</h4>
+<h4 class="date">2024-07-01</h4>
 
 </div>
 
@@ -360,37 +360,65 @@ here!</p>
 <div id="enhancedf" class="section level1">
 <h1>enhanceDF()</h1>
 <p><strong>Description</strong><br />
-Function to download specific environmental variables related to the
-coordinates of your data points.</p>
+Extracts specific environmental information from the data lake at
+specific coordinates of your data points.</p>
 <p><strong>Arguments</strong></p>
 <ul>
-<li>inputPoints: dataframe of your presences/absences with the columns
-“Latitude”, “Longitude”, and optionally “Time”, “year”, “month”</li>
-<li>requestedParameters: list of parameters with info on “par”, “fun”,
-“buffer”, optionally “convert_from_timestep”</li>
-<li>requestedTimeSteps: number specifying the temporal resolution (e.g
-86400000 for daily)</li>
-<li>stacCatalogue: STAC Catalogue containing the URL’s to the datasets
-and metadata information</li>
-<li>verbose: “on” or “” , don’t know exactly what it does now</li>
-<li>select_layers: a list of length n with n the number of parameters,
-need to choose for every parameter which datalayer you want to use in
-the case there is more than one. If left empty will need to choose one
-by one later in the workflow.</li>
+<li>inputPoints: A dataframe of presences/absences with the columns
+“Latitude”, “Longitude”, and optionally “Time”</li>
+<li>requestedParameters: A named list of parameters with each parameter
+containing named vector with info on “par” (required), “buffer”, “fun”,
+“category” and “convert_from_timestep” (optional). Only providing “par”
+simply extracts the value of the requested parameter at the closest
+Longitude, Latitude, Time and atDepth. The optional arguments allow for
+more complex queries (see details).</li>
+<li>requestedTimeSteps: An integer in seconds specifying the temporal
+resolution (e.g 86400000 for daily)</li>
+<li>stacCatalogue: A dataframe of the STAC Catalog, containing the URL’s
+to the datasets and metadata information</li>
+<li>verbose: Character of either “on” or ““. When verbose =”on”, columns
+<em>par</em>_x, <em>par</em>_y, <em>par_z, par</em>_t are added to the
+output dataframe to show the location, depth and time where the
+environmental data was extracted from.</li>
+<li>atDepth: A numerical indicating the requested depth from where to
+extract from. For each parameter in requestedParameters, the function
+extracts values at the depth layer of this parameter that is closest to
+atDepth.</li>
+<li>select_layers: <em>Only to use on second iteration of the
+function.</em> A vector with integers indicating which product with
+length n (with n the number of parameters). This argument allows to
+predefine for every parameter which product you want to use in case when
+there are multiple options. When left empty, the function will ask user
+input for each layer where multiple products are available for the given
+parameter and range of longitude, latitude and time.</li>
 </ul>
 <p><strong>Format</strong><br />
-A dataframe<br />
-<strong>Details</strong><br />
-Depends on the function <code>lookupParameter()</code>
-<strong>Value</strong><br />
+A dataframe.</p>
+<p><strong>Details</strong><br />
+Depends on the function <code>lookupParameter()</code>.</p>
+<p>A buffer lookup can be done by providing a buffer value (in meters)
+for each parameter in requestedParameters and a function (fun) that is
+applied to this buffer. For example, buffer = 10000 and fun = “mean”,
+will calculate the average value of a buffer of 10000 m around each
+point in inputPoints. Fun can be given any regular function such as
+“mean”, “median”, “min” or “max”. For categorical variables, fun can be
+either “most_frequent” (derives the most frequent category in the
+buffer) or “exact”. Exact can be used when a specific category is
+searched for (provided in “category”) and will return the percentage
+area covered by the specified “category” in the buffer area.<br />
+“convert_from_timestep” provides an option to derive data at a
+resolution that is coarser than the product listed in the catalogue. For
+example, with “requestedTimeSteps”=<strong><em>NA</em></strong>
+“convert_from_timestep”=86400000, monthly values are extracted from a
+product that has a daily timestep in the data lake. Currently, only the
+conversion of daily to monthly data is implemented.</p>
+<p><strong>Value</strong><br />
 A dataframe consisting of the original inputPoints appended by columns
-of parameter values.<br />
-<strong>Examples</strong></p>
-<pre class="r"><code>parameters &lt;- list(&quot;thetao&quot;= c(&quot;par&quot; = &quot;thetao&quot;, &quot;fun&quot; = &quot;mean&quot;, &quot;buffer&quot; = &quot;10000&quot;),
-                  
-                   &quot;so&quot;= c(&quot;par&quot; = &quot;so&quot;, &quot;fun&quot; = &quot;mean&quot;, &quot;buffer&quot; = &quot;10000&quot;),
-                  
-                  &quot;npp&quot;= c(&quot;par&quot; = &quot;npp&quot;, &quot;fun&quot; = &quot;mean&quot;, &quot;buffer&quot; = &quot;10000&quot;,&quot;convert_from_timestep&quot; = &quot;86400000&quot;))
+of parameter values.</p>
+<p><strong>Examples</strong></p>
+<pre class="r"><code>parameters &lt;- list(&quot;thetao&quot;= c(&quot;par&quot; = &quot;thetao&quot;, &quot;buffer&quot; = &quot;10000&quot;, &quot;fun&quot; = &quot;mean&quot;),
+                   &quot;so&quot;= c(&quot;par&quot; = &quot;so&quot;, &quot;buffer&quot; = &quot;10000&quot;, &quot;fun&quot; = &quot;mean&quot;),
+                  &quot;npp&quot;= c(&quot;par&quot; = &quot;npp&quot;, &quot;buffer&quot; = &quot;10000&quot;, &quot;fun&quot; = &quot;mean&quot;,&quot;convert_from_timestep&quot; = &quot;86400000&quot;))
 
 df_occ_bg_env = enhanceDF(inputPoints = df_occs %&gt;% 
                             mutate(Time = as.POSIXct(paste(year,month,1,sep = &quot;-&quot;))),
@@ -414,13 +442,13 @@ where to extract this value and optionally also a depth.</p>
 <li>atDepth:</li>
 </ul>
 <p><strong>Format</strong><br />
-A dataframe<br />
-<strong>Details</strong><br />
-Depends on the function <code>lookupParameter()</code>
-<strong>Value</strong><br />
+A dataframe</p>
+<p><strong>Details</strong><br />
+Depends on the function <code>lookupParameter()</code></p>
+<p><strong>Value</strong><br />
 A dataframe consisting of the original inputPoints appended by columns
-of parameter values.<br />
-<strong>Examples</strong></p>
+of parameter values.</p>
+<p><strong>Examples</strong></p>
 </div>
 
 
