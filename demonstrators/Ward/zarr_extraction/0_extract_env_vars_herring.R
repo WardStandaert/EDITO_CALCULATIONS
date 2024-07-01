@@ -1,5 +1,5 @@
 # 1. Prepare data extraction ----
-setwd("/home/onyxia/work/EDITO_CALCULATIONS/zarr_extraction/")
+setwd("/home/onyxia/work/EDITO_CALCULATIONS/demonstrators/Ward/zarr_extraction/")
 
 # load functions, but also cached stac catalog named stacCatalog
 source("editoTools.R")
@@ -23,19 +23,19 @@ timeSteps=c(2629746000)
 
 
 #the requested parameters, names in the stac catalogue table field 'par' .. see unique(stacCatalogue$par) for a list 
-parameters = list("thetao"= c("par" = "thetao",
-                              "fun" = "mean",
-                              "buffer" = "10000"),
-                  "so"= c("par" = "so",
-                          "fun" = "mean",
-                          "buffer" = "10000"),
-                  "zooc"= c("par" = "zooc",
+parameters = list("zooc"= c("par" = "zooc",
                             "fun" = "mean",
                             "buffer" = "10000",
                             "convert_from_timestep" = 86400000),
                   "phyc"= c("par" = "phyc",
                             "fun" = "mean",
-                            "buffer" = "10000"))
+                            "buffer" = "10000"),
+                  "thetao"= c("par" = "thetao",
+                              "fun" = "mean",
+                              "buffer" = "10000"),
+                  "so"= c("par" = "so",
+                          "fun" = "mean",
+                          "buffer" = "10000"))
 
 parameters = list("Substrate"= c("par" = "Substrate",
                                  "fun" = "table",
@@ -69,44 +69,136 @@ enhanced_DF = enhanceDF(inputPoints = points,
                         atDepth = 20)
 
 
+#try to add new zarr file to catalog manually (downsampled elevation)
+#start by loading the editoTools, this also loads the EDITOSTAC catalog
+source("editoTools.R")
+glimpse(EDITOSTAC)
+#add the new bathymetry file to the catalog
+url <- "https://minio.lab.dive.edito.eu/oidc-willemboone/bathymetry_ward.zarr"
+EDITOSTAC_ed <- EDITOSTAC %>% add_row(par = "elevation",
+                      href = url,
+                      latmin = 48,
+                      latmax = 62,
+                      lonmin = -12,
+                      lonmax = 10,
+                      start_datetime = "1900-01-01",
+                      end_datetime = "3000-01-01",
+                      title = "downsampled_bathymetry",
+                      categories = 0,
+                      catalogue = "EMODNET",
+                      chunktype = "chunked")
+
+parameters = list("elevation"= c("par" = "elevation",
+                                 "fun" = "mean",
+                                 "buffer" = "18000"))
+
+enhanced_DF_depth = enhanceDF(inputPoints = points,
+                        requestedParameters = parameters, 
+                        requestedTimeSteps = NA, 
+                        stacCatalogue = EDITOSTAC_ed, 
+                        verbose="on",
+                        atDepth = 20)
+
+
 #1,1,1,1
 #always opt for timeChunked
-glimpse(enhanced_DF)
+glimpse(enhanced_DF_depth)
 
+## trials on extracting seabed habitat data
+# edit EDITOSTAC twice (should be solved)
+EDITOSTAC[which(EDITOSTAC$par == "EUNIS2019C" & EDITOSTAC$asset == "Zarr"),c("latmin","latmax","lonmin","lonmax")] <- matrix(data = c(48,62,-12,10), nrow = 1)
+EDITOSTAC[which(EDITOSTAC$par == "EUNIS2019C" & EDITOSTAC$asset == "Zarr"),"par"] <- "eunis_seabed_habitat_class_2019"
+r <- getRasterSlice(requestedParameter = "eunis_seabed_habitat_class_2019", lon_min = -12, lon_max = 10, lat_min = 48, lat_max = 62, stacCatalogue = EDITOSTAC)
+plot(r)
+
+
+
+#test on selecting specific categorical variable
+parameters = list("seabed_energy"= c("par" = "seabed_energy",
+                              "fun" = "table",
+                              "buffer" = "10000"))
+EDITOSTAC[which(EDITOSTAC$par == "Energy" & EDITOSTAC$asset == "Zarr"),c("latmin","latmax","lonmin","lonmax")] <- matrix(data = c(48,62,-12,10), nrow = 1)
+EDITOSTAC[which(EDITOSTAC$par == "Energy" & EDITOSTAC$asset == "Zarr"),c("latmin","latmax","lonmin","lonmax")] <- matrix(data = c(48,62,-12,10), nrow = 1)
+EDITOSTAC[which(EDITOSTAC$par == "Energy" & EDITOSTAC$asset == "Zarr"),"par"] <- "seabed_energy"
+enhanced_DF_depth = enhanceDF(inputPoints = points,
+                              requestedParameters = parameters, 
+                              requestedTimeSteps = NA, 
+                              stacCatalogue = EDITOSTAC, 
+                              verbose="on",
+                              atDepth = 20)
+
+r <- getRasterSlice(requestedParameter = "seabed_energy",
+                    lon_min = -12,
+                    lon_max = 10,
+                    lat_min = 48,
+                    lat_max = 62,
+                    requestedTimeSteps = NA,
+                    date = "2020-01-01",
+                    stacCatalogue = EDITOSTAC)
+plot(r)
+
+#does not work if no period is provided. would work once monthly data is not represented as NA anymore
+new_pts <- tibble(Longitude = c(0,2,4,6,8),
+                  Latitude = c(50,50,50,50,50),
+                  Time = rep(as.POSIXct("2020-01-01",tz = "UTC")))
+
+enhanced_DF = enhanceDF(inputPoints = new_pts,
+                              requestedParameters = list("seabed_energy"= c("par" = "seabed_energy",
+                                                                            "fun" = "most_frequent",
+                                                                            "buffer" = "50000")), 
+                              requestedTimeSteps = NA, 
+                              stacCatalogue = EDITOSTAC, 
+                              verbose="on",
+                              atDepth = 0)
+enhanced_DF$seabed_energy
+# [1] 3 3 4 4 2
+
+#try an exact match with category 3 (e.g. species likes to be close to corals)
+enhanced_DF = enhanceDF(inputPoints = new_pts,
+                        requestedParameters = list("seabed_energy"= c("par" = "seabed_energy",
+                                                                      "fun" = "exact",
+                                                                      "category" = "3",
+                                                                      "buffer" = "50000")), 
+                        requestedTimeSteps = NA, 
+                        stacCatalogue = EDITOSTAC, 
+                        verbose="on",
+                        atDepth = 0)
+enhanced_DF$seabed_energy
+# [1] 3 3 4 4 2
 
 ## Compare with original extraction  ----
 ### Numerical variables ----
 par(mfrow = c(3,2))
-plot(enhanced_DF$SST, enhanced_DF$thetao, cex.lab=1.3,
-     xlim = c(min(enhanced_DF$SST, enhanced_DF$thetao, na.rm = T), max(enhanced_DF$SST, enhanced_DF$thetao, na.rm = T)),
-     ylim = c(min(enhanced_DF$SST, enhanced_DF$thetao, na.rm = T), max(enhanced_DF$SST, enhanced_DF$thetao, na.rm = T)))
-plot(enhanced_DF$SSS, enhanced_DF$so, cex.lab=1.3,
-     xlim = c(min(enhanced_DF$SSS, enhanced_DF$so, na.rm = T), max(enhanced_DF$SSS, enhanced_DF$so, na.rm = T)),
-     ylim = c(min(enhanced_DF$SSS, enhanced_DF$so, na.rm = T), max(enhanced_DF$SSS, enhanced_DF$so, na.rm = T)))
-plot(enhanced_DF$Phyto, enhanced_DF$phyc, cex.lab=1.3,
-     xlim = c(min(enhanced_DF$Phyto, enhanced_DF$phyc, na.rm = T), max(enhanced_DF$Phyto, enhanced_DF$phyc, na.rm = T)),
-     ylim = c(min(enhanced_DF$Phyto, enhanced_DF$phyc, na.rm = T), max(enhanced_DF$Phyto, enhanced_DF$phyc, na.rm = T)))
-plot(enhanced_DF$ZooPl, enhanced_DF$zooc, cex.lab=1.3,
-     xlim = c(min(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T), max(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T)),
-     ylim = c(min(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T), max(enhanced_DF$ZooPl, enhanced_DF$zooc, na.rm = T)))
-# plot(enhanced_DF$depth, enhanced_DF$elevation, cex.lab=1.3,
-#      xlim = c(min(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T), max(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T)),
-#      ylim = c(min(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T), max(enhanced_DF$depth, enhanced_DF$elevation, na.rm = T)))
+plot(enhanced_DF_depth$SST, enhanced_DF_depth$thetao, cex.lab=1.3,
+     xlim = c(min(enhanced_DF_depth$SST, enhanced_DF_depth$thetao, na.rm = T), max(enhanced_DF_depth$SST, enhanced_DF_depth$thetao, na.rm = T)),
+     ylim = c(min(enhanced_DF_depth$SST, enhanced_DF_depth$thetao, na.rm = T), max(enhanced_DF_depth$SST, enhanced_DF_depth$thetao, na.rm = T)))
+plot(enhanced_DF_depth$SSS, enhanced_DF_depth$so, cex.lab=1.3,
+     xlim = c(min(enhanced_DF_depth$SSS, enhanced_DF_depth$so, na.rm = T), max(enhanced_DF_depth$SSS, enhanced_DF_depth$so, na.rm = T)),
+     ylim = c(min(enhanced_DF_depth$SSS, enhanced_DF_depth$so, na.rm = T), max(enhanced_DF_depth$SSS, enhanced_DF_depth$so, na.rm = T)))
+plot(enhanced_DF_depth$Phyto, enhanced_DF_depth$phyc, cex.lab=1.3,
+     xlim = c(min(enhanced_DF_depth$Phyto, enhanced_DF_depth$phyc, na.rm = T), max(enhanced_DF_depth$Phyto, enhanced_DF_depth$phyc, na.rm = T)),
+     ylim = c(min(enhanced_DF_depth$Phyto, enhanced_DF_depth$phyc, na.rm = T), max(enhanced_DF_depth$Phyto, enhanced_DF_depth$phyc, na.rm = T)))
+plot(enhanced_DF_depth$ZooPl, enhanced_DF_depth$zooc, cex.lab=1.3,
+     xlim = c(min(enhanced_DF_depth$ZooPl, enhanced_DF_depth$zooc, na.rm = T), max(enhanced_DF_depth$ZooPl, enhanced_DF_depth$zooc, na.rm = T)),
+     ylim = c(min(enhanced_DF_depth$ZooPl, enhanced_DF_depth$zooc, na.rm = T), max(enhanced_DF_depth$ZooPl, enhanced_DF_depth$zooc, na.rm = T)))
+plot(enhanced_DF_depth$depth, enhanced_DF_depth$elevation, cex.lab=1.3,
+     xlim = c(min(enhanced_DF_depth$depth, enhanced_DF_depth$elevation, na.rm = T), max(enhanced_DF_depth$depth, enhanced_DF_depth$elevation, na.rm = T)),
+     ylim = c(min(enhanced_DF_depth$depth, enhanced_DF_depth$elevation, na.rm = T), max(enhanced_DF_depth$depth, enhanced_DF_depth$elevation, na.rm = T)))
 
 
 # 3. Check extract outcome ----
 ## Check difference in time  ----
 
-difftime(enhanced_DF$Time, enhanced_DF$thetao_t, units = "days")
-difftime(enhanced_DF$Time, enhanced_DF$so_t, units = "days")
-difftime(enhanced_DF$Time, enhanced_DF$zooc_t, units = "days")
-difftime(enhanced_DF$Time, enhanced_DF$phyc_t, units = "days")
+difftime(enhanced_DF_depth$Time, enhanced_DF_depth$thetao_t, units = "days")
+difftime(enhanced_DF_depth$Time, enhanced_DF_depth$so_t, units = "days")
+difftime(enhanced_DF_depth$Time, enhanced_DF_depth$zooc_t, units = "days")
+difftime(enhanced_DF_depth$Time, enhanced_DF_depth$phyc_t, units = "days")
 
 ## Check difference in space  ----
 library(geosphere)
 
 
-enhanced_DF$thetao_dist <- apply(enhanced_DF, 1, function(row) {
+enhanced_DF_depth$thetao_dist <- apply(enhanced_DF_depth, 1, function(row) {
   # Convert elements to numeric
   Longitude <- as.numeric(row["Longitude"])
   Latitude <- as.numeric(row["Latitude"])
@@ -117,7 +209,7 @@ enhanced_DF$thetao_dist <- apply(enhanced_DF, 1, function(row) {
   distm(c(Longitude, Latitude), c(thetao_x, thetao_y), fun = distHaversine)
 })
 
-enhanced_DF$so_dist <- apply(enhanced_DF, 1, function(row) {
+enhanced_DF_depth$so_dist <- apply(enhanced_DF_depth, 1, function(row) {
   # Convert elements to numeric
   Longitude <- as.numeric(row["Longitude"])
   Latitude <- as.numeric(row["Latitude"])
@@ -128,7 +220,7 @@ enhanced_DF$so_dist <- apply(enhanced_DF, 1, function(row) {
   distm(c(Longitude, Latitude), c(so_x, so_y), fun = distHaversine)
 })
 
-enhanced_DF$zooc_dist <- apply(enhanced_DF, 1, function(row) {
+enhanced_DF_depth$zooc_dist <- apply(enhanced_DF_depth, 1, function(row) {
   # Convert elements to numeric
   Longitude <- as.numeric(row["Longitude"])
   Latitude <- as.numeric(row["Latitude"])
@@ -139,7 +231,7 @@ enhanced_DF$zooc_dist <- apply(enhanced_DF, 1, function(row) {
   distm(c(Longitude, Latitude), c(zooc_x, zooc_y), fun = distHaversine)
 })
 
-enhanced_DF$phyc_dist <- apply(enhanced_DF, 1, function(row) {
+enhanced_DF_depth$phyc_dist <- apply(enhanced_DF_depth, 1, function(row) {
   # Convert elements to numeric
   Longitude <- as.numeric(row["Longitude"])
   Latitude <- as.numeric(row["Latitude"])
@@ -150,7 +242,7 @@ enhanced_DF$phyc_dist <- apply(enhanced_DF, 1, function(row) {
   distm(c(Longitude, Latitude), c(phyc_x, phyc_y), fun = distHaversine)
 })
 
-enhanced_DF$elevation_dist <- apply(enhanced_DF, 1, function(row) {
+enhanced_DF_depth$elevation_dist <- apply(enhanced_DF_depth, 1, function(row) {
   # Convert elements to numeric
   Longitude <- as.numeric(row["Longitude"])
   Latitude <- as.numeric(row["Latitude"])
@@ -161,7 +253,7 @@ enhanced_DF$elevation_dist <- apply(enhanced_DF, 1, function(row) {
   distm(c(Longitude, Latitude), c(elevation_x, elevation_y), fun = distHaversine)
 })
 
-enhanced_DF$Substrate_dist <- apply(enhanced_DF, 1, function(row) {
+enhanced_DF_depth$Substrate_dist <- apply(enhanced_DF_depth, 1, function(row) {
   # Convert elements to numeric
   Longitude <- as.numeric(row["Longitude"])
   Latitude <- as.numeric(row["Latitude"])
@@ -172,7 +264,7 @@ enhanced_DF$Substrate_dist <- apply(enhanced_DF, 1, function(row) {
   distm(c(Longitude, Latitude), c(Substrate_x, Substrate_y), fun = distHaversine)
 })
 
-enhanced_DF$Energy_dist <- apply(enhanced_DF, 1, function(row) {
+enhanced_DF_depth$Energy_dist <- apply(enhanced_DF_depth, 1, function(row) {
   # Convert elements to numeric
   Longitude <- as.numeric(row["Longitude"])
   Latitude <- as.numeric(row["Latitude"])
@@ -183,16 +275,16 @@ enhanced_DF$Energy_dist <- apply(enhanced_DF, 1, function(row) {
   distm(c(Longitude, Latitude), c(Energy_x, Energy_y), fun = distHaversine)
 })
 
-glimpse(enhanced_DF)
+glimpse(enhanced_DF_depth)
 
 par(mfrow = c(3,3))
-hist(enhanced_DF$thetao_dist)
-hist(enhanced_DF$so_dist)
-hist(enhanced_DF$phyc_dist)
-hist(enhanced_DF$zooc_dist)
-# hist(enhanced_DF$elevation_dist)
-hist(enhanced_DF$Substrate_dist)
-hist(enhanced_DF$Energy_dist)
+hist(enhanced_DF_depth$thetao_dist)
+hist(enhanced_DF_depth$so_dist)
+hist(enhanced_DF_depth$phyc_dist)
+hist(enhanced_DF_depth$zooc_dist)
+hist(enhanced_DF_depth$elevation_dist)
+hist(enhanced_DF_depth$Substrate_dist)
+hist(enhanced_DF_depth$Energy_dist)
 
 
 ### Categorical variables ----
@@ -204,15 +296,15 @@ substr_lvl <- tibble(sub_char = c("Fine mud", "Sand", "Muddy sand", "Mixed sedim
 energy_lvl <- tibble(ene_char = c("High energy", "Moderate energy", "Low energy", "No energy information"),
                      seabed_energy = c(1:4))
 
-enhanced_DF <- enhanced_DF %>%
+enhanced_DF_depth <- enhanced_DF_depth %>%
   left_join(substr_lvl, by = c("seabed_substrate")) %>%
   left_join(energy_lvl, by = c("seabed_energy"))
 
-glimpse(enhanced_DF)
+glimpse(enhanced_DF_depth)
 
-sum(enhanced_DF$Energy_Description == enhanced_DF$ene_char) / length(enhanced_DF$Energy_Description)
+sum(enhanced_DF_depth$Energy_Description == enhanced_DF_depth$ene_char) / length(enhanced_DF_depth$Energy_Description)
 # 94% match
-sum(enhanced_DF$Substrate_Description == enhanced_DF$sub_char) / length(enhanced_DF$Substrate_Description)
+sum(enhanced_DF_depth$Substrate_Description == enhanced_DF_depth$sub_char) / length(enhanced_DF_depth$Substrate_Description)
 # 82% match
 
 
