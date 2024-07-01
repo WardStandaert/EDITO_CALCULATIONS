@@ -1,12 +1,9 @@
 # 1. Prepare data extraction ----
 setwd("/home/onyxia/work/EDITO_CALCULATIONS/demonstrators/Ward/zarr_extraction/")
 
-# load functions, but also cached stac catalog named stacCatalog
+# load functions, but also cached stac catalog named EDITOSTAC
 source("editoTools.R")
 options("outputdebug"=c('L','M'))
-
-#the cached stacCatalog is called 'EDITOSTAC'
-load(file = "./data-raw/editostacv2.par")
 
 # the file to process
 # datafile = "./data-raw/herring_test_set.csv"
@@ -37,9 +34,9 @@ parameters = list("zooc"= c("par" = "zooc",
                           "fun" = "mean",
                           "buffer" = "10000"))
 
-parameters = list("Substrate"= c("par" = "Substrate",
-                                 "fun" = "table",
-                                 "buffer" = "10000"))
+# parameters = list("Substrate"= c("par" = "Substrate",
+#                                  "fun" = "table",
+#                                  "buffer" = "10000"))
 
 # parameters= list("Energy"= c("par" = "Energy", 
 #                              "fun" = "most_freq", 
