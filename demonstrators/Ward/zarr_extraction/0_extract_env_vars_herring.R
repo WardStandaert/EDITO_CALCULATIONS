@@ -61,7 +61,7 @@ enhanced_DF = enhanceDF(inputPoints = points,
                         requestedParameters = parameters, 
                         requestedTimeSteps = NA, 
                         stacCatalogue = EDITOSTAC, 
-                        verbose="on",
+                        verbose="",
                         select_layers = rep(1,length(parameters)),
                         atDepth = 20)
 

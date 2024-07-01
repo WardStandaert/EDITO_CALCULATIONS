@@ -446,7 +446,7 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
   if("Time" %in% colnames(pts))
   {
     pts$diff= as.numeric(difftime(pts$Time,pts$Time[1], 'secs'))
-    pts$Slice=cumsum(c(T, diff(pts$diff) > 24*60*60 )) # threshold of days
+    pts$Slice=cumsum(c(T, diff(pts$diff) > 24*60*60)) # threshold of days
     locs=dplyr::group_by(pts,Longitude,Latitude,Slice) %>% dplyr::summarise(from=min(Period),till=max(Period), cnt=n(), .groups='drop')
   }
   else
@@ -456,7 +456,7 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
   lookup=c("Time","Longitude","Latitude","loop","method")
   names(lookup)=c(sprintf("vb_%s_t", param),sprintf("vb_%s_x", param),sprintf("vb_%s_y",param),sprintf("vb_%s_l",param),sprintf("vb_%s_m",param))
   
-  if(  nrow(locs) < length(periods ) ) {
+  if(nrow(locs) < length(periods)) {
     #loop locations
     resulting= foreach(p=1:nrow(locs),.options.multicore=mcoptions, .combine='CombineR', .packages = c("terra","stars","magrittr","dplyr","Rarr")) %dopar% 
       { 
