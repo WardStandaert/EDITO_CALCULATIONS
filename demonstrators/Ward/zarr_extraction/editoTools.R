@@ -27,6 +27,7 @@ s3_client <- function(endpoint) {paws.storage::s3(
     endpoint = endpoint)
 )}
 
+
 acf <- S3FileSystem$create(
   scheme = "https",
   endpoint_override = "s3.waw3-1.cloudferro.com",
@@ -36,9 +37,11 @@ acf <- S3FileSystem$create(
 
 EDITOSTAC = arrow::open_dataset(acf$path("emodnet/edito_stac_cache.parquet")) %>% collect()
 
+
 #function to return the closest value in a list, needed to select the time and depth slice from the zarr file
 closest<-function(xv,sv){
   which(abs(xv-sv)==min(abs(xv-sv))) }
+
 
 #wrap a gdal request string
 toGDAL<-function(fn,par=""){
@@ -49,12 +52,12 @@ toGDAL<-function(fn,par=""){
   return(url)
 }
 
+
 gdalinfo<-function(fn,par=""){
   url=toGDAL(fn,par)
   jsonlite::fromJSON(gdal_utils('mdiminfo', url, quiet = T))
-  
-  
 }
+
 
 #function to track and report progress including from forked processes
 options("outputdebug"=c('L','M'))
@@ -66,9 +69,8 @@ dbl<-function(...){
   if("L" %in% getOption("outputdebug")) if(class(loglist)=='list') loglist<<-append(loglist,c(m))   else loglist<<-c(m)
   if("P" %in% getOption("outputdebug")) print(m)
   if("M" %in% getOption("outputdebug")) message(m)
-  
-  
 }
+
 
 #function to convert time to seconds since 1970-01-01
 #specially cmems uses all kinds of origins and units
@@ -76,25 +78,23 @@ num2dt<-function(n, unit='seconds since 1970-01-01'){
   "hours since 1950-01-01"
   
   origin="1970-01-01"
-  if(stringr::str_detect(unit,"2000-01-01"  )) origin="2000-01-01"
-  else if(stringr::str_detect(unit,"1970-01-01"  )) origin="1970-01-01"
-  else if(stringr::str_detect(unit,"1950-01-01"  )) origin="1950-01-01"
+  if(stringr::str_detect(unit,"2000-01-01")) origin="2000-01-01"
+  else if(stringr::str_detect(unit,"1970-01-01")) origin="1970-01-01"
+  else if(stringr::str_detect(unit,"1950-01-01")) origin="1950-01-01"
   
   m=1
-  if(stringr::str_detect(unit,"milliseconds"  ))  m=1000
-  if(stringr::str_detect(unit,"hours"  ))         m=1/3600
-  if(stringr::str_detect(unit,"minutes"  ))       m=1/60
+  if(stringr::str_detect(unit,"milliseconds"))  m=1000
+  if(stringr::str_detect(unit,"hours"))         m=1/3600
+  if(stringr::str_detect(unit,"minutes"))       m=1/60
   
-  return(as.POSIXct(n/m,origin=origin,tz='Z') )
-  
-  
+  return(as.POSIXct(n/m,origin=origin,tz='Z'))
 }
+
 
 #used in parallel processing;  drop results of uncomplete parameter instead of losing all data
 Combine<-function(lx,ly)
 {
   if(length(lx)==0) return(ly)
-  
   if(is.null(lx$df) || nrow(lx$df)==0)
   { lx$log$progess=paste(lx$log$progess, "first table is empty")
   return(list('log'=append(lx$log,list(ly$log))  , 'df'= ly$df)) 
@@ -107,16 +107,14 @@ Combine<-function(lx,ly)
   { ly$log$progess=paste(ly$log$progress, paste("new dataframe has different rowcount ", nrow(lx$df), "><", nrow(ly$df) ), sep='\n')
   return(list('log'=append(lx$log,list(ly$log))  , 'df'= lx$df)) 
   }
-  
-  
   list('log'=append(lx$log,ly$log), 'df'= dplyr::bind_cols(lx$df,ly$df) )
 }
+
 
 #used in parallel processing;  drop results of uncomplete parameter instead of losing all data
 CombineC<-function(lx,ly)
 {
   if(length(lx)==0) return(ly)
-  
   if(is.null(lx$df) || nrow(lx$df)==0)
   { lx$log$progess=paste(lx$log$progess, "first table is empty")
   return(list('log'=append(lx$log,list(ly$log))  , 'df'= ly$df)) 
@@ -129,7 +127,6 @@ CombineC<-function(lx,ly)
   { ly$log$progess=paste(ly$log$progress, paste("new dataframe has different rowcount ", nrow(lx$df), "><", nrow(ly$df) ), sep='\n')
   return(list('log'=append(lx$log,list(ly$log))  , 'df'= lx$df)) 
   }
-  
   
   newdf=left_join(lx$df,ly$df,by=c('Latitude','Longitude','Time'))
   
@@ -150,7 +147,6 @@ CombineR<-function(x,y)
 #function to retry reading from aws s3, because sometime it just fails, without reason 
 #reads json and makes a named list
 retryJson<-function(url){
-  
   dbl(url)
   
   resp=httr::RETRY(url=url,verb='GET',times=3, encode='json', httr::content_type('json'))
@@ -158,8 +154,6 @@ retryJson<-function(url){
     return("")
   
   return(jsonlite::fromJSON(httr::content(resp,'text',encoding = 'UTF-8')))
-  
-  
 }
 
 #uses terra::rast
@@ -171,7 +165,6 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
   dsn=toGDAL(zinfo$href)
   
   if(is.na(atDepth)) atDepth=0
-  
   
   #check if parameter is available in zarr file
   if(param %in% names(zinfo$meta$arrays)) 
@@ -213,9 +206,7 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
   
   parTabel=dplyr::tibble()
   
-  
   try({
-    
     #simple extract function if there is no buffer provided
     if(!"buffer" %in% names(params)) {
       parTabel=terra::extract(x = r, y = dplyr::select(coords,x,y), ID= F, xy=T) 
@@ -250,7 +241,6 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
     }
   }, silent=T)
   
-  
   cn=c('','_x','_y')
   
   if(nrow(parTabel) > 0) 
@@ -268,6 +258,7 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
   }
   return(parTabel)
 }
+
 
 #uses rarr::read_array
 getTimeSeriesFromZarr<-function(usePar, coords, from=NULL, till=NULL, zinfo){
@@ -318,14 +309,11 @@ getTimeSeriesFromZarr<-function(usePar, coords, from=NULL, till=NULL, zinfo){
   }
   
   return(parTable)
-  
 }
 
 
 getLastInfoFromZarr<-function(href,ori=NULL)
 {
-  
-  
   #info from zarr file specified in href
   meta=jsonlite::fromJSON(gdal_utils('mdiminfo', toGDAL(href), quiet = T))
   
@@ -367,7 +355,6 @@ getLastInfoFromZarr<-function(href,ori=NULL)
     zi$lonstep=meta$arrays$longitude$attributes$step
     zi$lonmin=meta$arrays$longitude$attributes$valid_min
     zi$lonmax=meta$arrays$longitude$attributes$valid_max
-    
   }
   
   if(is.null(zi$latstep) | is.null(zi$latmin)) 
@@ -407,16 +394,12 @@ getLastInfoFromZarr<-function(href,ori=NULL)
     zi$levels=read_zarr_array(sprintf("%s%s", href, '/elevation' ), index=list(1:meta$arrays$elevation$dimension_size), s3_client = s3_client(endpoint))
   }
   
-  
-  
-  
-  
   zi$meta=meta
   zi$href=href
   
   return(zi )
-  
 }
+
 
 # main function, adds the requested parameter (usePar) to the data frame (pts) 
 # parameters = dslist , usePar, pts
@@ -430,8 +413,6 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
   registerDoParallel(cores=16)
   mcoptions=list(preschedule=F, silent=F)
   dbl("workers:",getDoParWorkers())
-  
-  
   
   #depending on the time resolution of the dataset, calculate a period to group points by timeslice
   #for some parameters we have climatology data that can be per month and other timesteps.. so check only the first one will not work..
@@ -463,12 +444,7 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
     pts$Period=lubridate::round_date(pts$Time,units)
     #difference between consecutive times.. needed to group in slices
     
-    
     dbl("ds timestep=", step, "rounded to ", units)
-    
-    
-    
-    
     }  
   }
   #parameter has no timeresolution eg bathymetry
@@ -480,24 +456,13 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
     dslist=dplyr::arrange(dslist,latstep)
   }
   
-  
-  
-  
   #group by timeslice
   periods=c(unique(pts$Period))
   
   dsng=dslist$href[1]
   
   zinfo=getLastInfoFromZarr(dslist$href[1], dslist$ori[1])
-  
-  # lat_transform = function(x) {x + 90}
-  # 
-  # if(dslist$catalogue[1] == "CMEMS") { 
-  #   zinfo$latmin = lat_transform(zinfo$latmin)
-  #   zinfo$latmax = lat_transform(zinfo$latmax)
-  #   } 
-  
-  
+
   if("Time" %in% colnames(pts))
   {
     pts$diff= as.numeric(difftime(pts$Time,pts$Time[1], 'secs'))
@@ -517,7 +482,6 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
     #loop locations
     resulting= foreach(p=1:nrow(locs),.options.multicore=mcoptions, .combine='CombineR', .packages = c("terra","stars","magrittr","dplyr","Rarr")) %dopar% 
       { 
-        
         tble=getTimeSeriesFromZarr(param, tibble('x'= locs$Longitude[p],'y'=locs$Latitude[p]), from=locs$from[p], till=locs$till[p], zinfo=zinfo )
         
         thistble=dplyr::filter(pts, Latitude==locs$Latitude[p],Longitude==locs$Longitude[p] ) %>% dplyr::select(Time=Period,Latitude,Longitude)
@@ -527,7 +491,6 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
         tble$loop=p
         tble$method="ts"
         tble=dplyr::rename(tble, any_of(lookup))
-        
         
         tble
       }
@@ -554,7 +517,6 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
             # tble=getMultipleTimeSeriesFromZarr(params,coords = dplyr::select(thistble, x=Longitude,y=Latitude), from=periods[p], till=periods[p], zinfo=zinfo )
         }  
         
-        
         #this prevents cbind errors when row counts don't match
         if(nrow(tble) != nrow(thistble) ) { tble = tibble( "par" = rep(NA , nrow(thistble)  ) ) ; colnames(tble)<-c(param) }
         rm(thistble)
@@ -565,11 +527,8 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
       }
     dbl("terra extracted tble: ", nrow(resulting))
     
-    
   }  
   resulting = cbind(pts,  resulting  )
-  
-  
   
   dbl("par:", param, "records: ", nrow(resulting))
   newpiece=list(usePar=list("href"= dsng, "par"=param,"nr"= nrow(resulting),"points"=nrow(locs),"periods"=length(periods),"stacinfo"= dplyr::slice(dslist,1),"zarrmeta"=zinfo$meta ,"progress"=loglist ) )
@@ -592,7 +551,6 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
 
 enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCatalogue, verbose="", atDepth = NA, select_layers = NULL)
 {
-  
   #we need to group the sampling points to reduce the data lookups
   #rounding to 3 deg decimals for lat/lon ot minutes for time is a very crude approximation
   #better is to use a snap to grid approach based on the spatiotemporal resolution of the parameter  
@@ -611,7 +569,6 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
   
   pts=dplyr::select(inputPoints,Latitude=RLatitude,Longitude=RLongitude,any_of(c("Time"="RTime")),any_of(c("Bathymetry","Elevation"))) %>% dplyr::distinct()
   
-  
   extracted=c()
   
   sources=c()
@@ -621,7 +578,6 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     parameter=requestedParameters[[currentPar]]
     
     param = ifelse(length(parameter)==1, parameter, parameter[[1]])
-    
     
     dbl()
     dbl("par:",param)
@@ -642,7 +598,6 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     #if the variable is categorical, do not filter based on start and end time (should be changed to dynamic vs static variable in future)
     if(dslist$categories[1] %in% c(NA,0))    dslist=dplyr::filter(dslist, start_datetime <= min(pts$Time) & end_datetime >= max(pts$Time)) 
     
-    
     if(! "Time" %in% colnames(pts))
       dslist=dplyr::filter(dslist,timestep %in% c(NA,0))
     
@@ -653,7 +608,6 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
         dbl("requested parameter ", param, " not found")
       next
     }
-    
     
     # if a preferred timestep is specified, use it
     if(! is.null(requestedTimeSteps))
@@ -694,13 +648,6 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     
     sources = c(sources,dslist$title)
   }
-  
-  
-  
-  #add the parameters to the requested points
-  # if(nrow(pts)==nrow(extracted$df))
-  #   pts=cbind(pts,extracted$df)
-  # 
   
   pts=extracted$df
   
@@ -763,7 +710,6 @@ getRasterSlice <- function(requestedParameter='thetao', lon_min=-10, lon_max=10,
     if(nrow(tlist)>0) dslist=tlist
   }
   
-  
   if(is.null(select_layers) & nrow(dslist) > 1) {
     dbl("Multiple options are available for your input parameters:")
     
@@ -807,8 +753,6 @@ getRasterSlice <- function(requestedParameter='thetao', lon_min=-10, lon_max=10,
     }
   }
   
-  
-  
   r=rast(sdsn)
   # temporary hack
   if(str_detect( zinfo$href, "euseamap")) r=flip(r,direction="vertical")
@@ -818,8 +762,6 @@ getRasterSlice <- function(requestedParameter='thetao', lon_min=-10, lon_max=10,
   ext(r)=c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1])
   
   r <- crop(r, ext(lon_min, lon_max, lat_min, lat_max))
-  
-  
   
   return(r)
 }
