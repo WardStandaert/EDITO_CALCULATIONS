@@ -362,6 +362,8 @@ here!</p>
 <p><strong>Description</strong><br />
 Extracts specific environmental information from the data lake at
 specific coordinates of your data points.</p>
+<p><strong>Usage</strong></p>
+<pre class="r"><code>enhanceDF(inputPoints, requestedParameters, requestedTimeSteps, stacCatalogue, verbose, atDepth, select_layers)</code></pre>
 <p><strong>Arguments</strong></p>
 <ul>
 <li>inputPoints: A dataframe of presences/absences with the columns
@@ -431,24 +433,83 @@ df_occ_bg_env = enhanceDF(inputPoints = df_occs %&gt;%
 <div id="lookupparameter" class="section level1">
 <h1>lookupParameter()</h1>
 <p><strong>Description</strong><br />
-Gets as input a specific datalayer in the STAC (given by previous code
-in <code>enhanceDF()</code>), a specific parametername , the coordinates
-where to extract this value and optionally also a depth.</p>
+<em>Helper function</em>. Extracts environmental information from one
+specific product.</p>
+<p><strong>Usage</strong></p>
+<pre class="r"><code>lookupParameter(dslist, usePar, pts, atDepth)</code></pre>
 <p><strong>Arguments</strong></p>
 <ul>
-<li>dslist:</li>
-<li>usePar:</li>
-<li>pts:</li>
-<li>atDepth:</li>
+<li>dslist: A vector specifying a specific product from the data lake as
+defined in STAC catalog (EDITOSTAC), the coordinates where to extract
+this value and optionally also a depth.</li>
+<li>usePar: A vector including the parameter name (required), and other
+settings buffer, fun and category (optional). See details in
+<code>enhanceDF()</code>.</li>
+<li>pts: A dataframe of presences/absences with the columns “Latitude”,
+“Longitude”, and “Time” (optional).</li>
+<li>atDepth: A numerical indicating the requested depth from where to
+extract from.</li>
 </ul>
-<p><strong>Format</strong><br />
-A dataframe</p>
-<p><strong>Details</strong><br />
-Depends on the function <code>lookupParameter()</code></p>
 <p><strong>Value</strong><br />
 A dataframe consisting of the original inputPoints appended by columns
-of parameter values.</p>
-<p><strong>Examples</strong></p>
+of environmental parameter values.</p>
+</div>
+<div id="getlastinfofromzarr" class="section level1">
+<h1>getLastInfoFromZarr()</h1>
+<p><strong>Description</strong></p>
+<p><em>Helper function</em>. Derives info on the zarr file specified in
+href.</p>
+<p><strong>Usage</strong></p>
+<pre class="r"><code>getLastInfoFromZarr(href, ori)</code></pre>
+<p><strong>Arguments</strong></p>
+<ul>
+<li><p>href: URI to the zarr file</p></li>
+<li><p>ori: URI to aws s3</p></li>
+</ul>
+<p><strong>Value</strong></p>
+<p>A list with available metadata on coordinates, timeframe, the
+environmental parameter, …</p>
+</div>
+<div id="getparfromzarrwinfo" class="section level1">
+<h1>getParFromZarrwInfo()</h1>
+<p><strong>Description</strong></p>
+<p><em>Helper function</em>. Extraction function to derive multiple
+locations at one timestep.</p>
+<p><strong>Usage</strong></p>
+<pre class="r"><code>getParFromZarrwInfo(usePar, coords, atDepth, zinfo, isCategory)</code></pre>
+<p><strong>Arguments</strong></p>
+<ul>
+<li><p>usePar: A vector including the parameter name (required), and
+other settings buffer, fun and category (optional). See details in
+<code>enhanceDF()</code>.</p></li>
+<li><p>coords: A dataframe of presences/absences with the columns “x”,
+“y”.</p></li>
+<li><p>atDepth: A numerical indicating the requested depth from where to
+extract from.</p></li>
+<li><p>zinfo: Output from <code>getLastInfoFromZarr()</code></p></li>
+<li><p>isCategory: Logical. <code>TRUE</code> if the requested variable
+is a categorical one.</p></li>
+</ul>
+</div>
+<div id="gettimeseriesfromzarr" class="section level1">
+<h1>getTimeSeriesFromZarr()</h1>
+<p><strong>Description</strong></p>
+<p><em>Helper function</em>. Extraction function to derive multiple
+timesteps at one location.</p>
+<p><strong>Usage</strong></p>
+<pre class="r"><code>getTimeSeriesFromZarr(usePar, coords, from, till, zinfo)</code></pre>
+<p><strong>Arguments</strong></p>
+<ul>
+<li><p>usePar: A vector including the parameter name (required), and
+other settings buffer, fun and category (optional). See details in
+<code>enhanceDF()</code>.</p></li>
+<li><p>coords: A dataframe of presences/absences with the columns “x”,
+“y”.</p></li>
+<li><p>from: A date. Start date of extraction.</p></li>
+<li><p>till: A date. End date of extraction.</p></li>
+<li><p>zinfo: A list. Output from
+<code>getLastInfoFromZarr()</code></p></li>
+</ul>
 </div>
 
 
