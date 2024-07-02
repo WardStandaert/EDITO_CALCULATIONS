@@ -91,7 +91,6 @@ getLastInfoFromZarr(href, ori)
 **Arguments**
 
 -   href: URI to the zarr file
-
 -   ori: URI to aws s3
 
 **Value**
@@ -113,13 +112,9 @@ getParFromZarrwInfo(usePar, coords, atDepth, zinfo, isCategory)
 **Arguments**
 
 -   usePar: A vector including the parameter name (required), and other settings buffer, fun and category (optional). See details in `enhanceDF()`.
-
 -   coords: A data frame of presences/absences with the columns "x", "y".
-
 -   atDepth: A numerical indicating the requested depth from where to extract from.
-
 -   zinfo: Output from `getLastInfoFromZarr()`
-
 -   isCategory: Logical. `TRUE` if the requested variable is a categorical one.
 
 # getTimeSeriesFromZarr()
@@ -137,11 +132,7 @@ getTimeSeriesFromZarr(usePar, coords, from, till, zinfo)
 **Arguments**
 
 -   usePar: A vector including the parameter name (required), and other settings buffer, fun and category (optional). See details in `enhanceDF()`.
-
 -   coords: A data frame of presences/absences with the columns "x", "y".
-
 -   from: A date. Start date of extraction.
-
 -   till: A date. End date of extraction.
-
 -   zinfo: A list. Output from `getLastInfoFromZarr()`
