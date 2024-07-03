@@ -138,7 +138,16 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
   
   r=rast(sdsn)
   
-  # if(isCategory)  r=flip(r, "vertical")
+  if(isCategory)  {#r=terra::flip(r, "vertical") --> currently does not work
+    #manually flip raster
+    r <- read_stars(sdsn,driver = "zarr")
+    values_matrix <- as.matrix(r[[1]])
+    flipped_matrix <- values_matrix[, ncol(values_matrix):1]
+    raster_flipped <- st_as_stars(flipped_matrix)
+    st_dimensions(raster_flipped) <- st_dimensions(r)
+    r <- st_as_stars(raster_flipped)
+    r <- as(r, "SpatRaster")
+  }
   
   if(crs(r)=="") {
     dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
@@ -694,6 +703,7 @@ getRasterSlice <- function(requestedParameter='thetao', lon_min=-10, lon_max=10,
   else if(!is.null(select_layers))  dslist <- dslist[select_layers,]
   
   zinfo=getLastInfoFromZarr(dslist$href[1], dslist$ori[1])
+  isCategory =  (!dslist$categories[1] %in% c(NA,0)) 
   
   dsn=toGDAL(zinfo$href)
   
@@ -728,6 +738,17 @@ getRasterSlice <- function(requestedParameter='thetao', lon_min=-10, lon_max=10,
   
   r=rast(sdsn)
 
+  if(isCategory)  {#r=terra::flip(r, "vertical") --> currently does not work
+    #manually flip raster
+    r <- read_stars(sdsn,driver = "zarr")
+    values_matrix <- as.matrix(r[[1]])
+    flipped_matrix <- values_matrix[, ncol(values_matrix):1]
+    raster_flipped <- st_as_stars(flipped_matrix)
+    st_dimensions(raster_flipped) <- st_dimensions(r)
+    r <- st_as_stars(raster_flipped)
+    r <- as(r, "SpatRaster")
+  }
+  
   dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
   crs(r)='epsg:4326'
   ext(r)=c(zinfo$lonmin[1],zinfo$lonmax[1],zinfo$latmin[1],zinfo$latmax[1])

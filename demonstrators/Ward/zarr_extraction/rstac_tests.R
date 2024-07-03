@@ -1,0 +1,222 @@
+library(rstac)
+library(purrr)
+# staging endpoint ----
+stac_endpoint_url <- 'https://catalog.staging.edito.eu'
+
+collects <- stac_endpoint_url %>%
+  stac() %>%
+  collections %>%
+  get_request()
+
+eunis <- collects$collections %>%
+  keep(~ str_detect(tolower(.x$title), "eunis")) %>%
+  .[[1]]
+
+glimpse(eunis)
+
+q <- stac_search(q = stac(stac_endpoint_url),
+                 collections = "emodnet-eunis_seabed_habitat_class_2019") %>%
+  get_request()
+
+eunis$links %>%
+  keep(~ .x)
+c('child','item')
+
+href <- keep(eunis$links, ~ str_detect(.x$rel, 'child|item')) %>%
+  .[[1]] %>%
+  .[["href"]] %>% items_fetch()
+href
+retryJson(href)
+
+
+seab <- collects$collections %>%
+  keep(~ str_detect(tolower(.x$title), "habitat")) %>%
+  .[[6]]
+
+seab
+
+
+
+# endpoint_copernicus <- "https://s3.waw3-1.cloudferro.com/mdl-metadata/metadata/catalog.stac.json"
+# cop_links <- retryJson(endpoint_copernicus)$links
+
+# new endpoint ----
+stac_endpoint_url <- 'https://catalog.dive.edito.eu/'
+
+#looking for correct name
+collects <- stac_endpoint_url %>%
+  stac() %>%
+  get_request()
+
+eunis <- collects$collections %>%
+  keep(~ str_detect(tolower(.x$title), "seabed_energy")) %>%
+  .[[1]]
+
+#request layer
+q <- stac_search(q = stac(stac_endpoint_url),
+                 collections = "emodnet-eunis_seabed_habitat_class_2019") %>%
+  get_request()
+
+#create link and extract raster
+link <- q$features[[1]]$assets$Zarr$href
+dsn <- toGDAL(link)
+sdsn=sprintf('%s:/%s',dsn,"eunis_seabed_habitat_class_2019")
+sdsn
+r <- rast(sdsn)
+plot(r)
+plot(raster.invert(r))
+plot(flip(r))
+
+
+library(stars)
+r <- read_stars(sdsn,driver = "zarr")
+plot(r)
+# Extract values as a matrix
+values_matrix <- as.matrix(r[[1]])
+
+# Flip the matrix along the y-axis
+flipped_matrix <- values_matrix[, ncol(values_matrix):1]
+
+# Recreate the stars object with the flipped matrix
+raster_flipped <- st_as_stars(flipped_matrix)
+
+# Copy the dimensions from the original raster to the flipped raster
+st_dimensions(raster_flipped) <- st_dimensions(r)
+
+# Plot to check the result
+plot(r, main = "Original Raster")
+plot(raster_flipped, main = "Flipped Raster")
+
+# Extract values as a matrix
+values_matrix <- as.matrix(raster)
+
+# Flip the matrix along the y-axis
+flipped_matrix <- values_matrix[nrow(values_matrix):1, ]
+
+# Ensure ncol and nrow return numeric values
+ncol_raster <- ncol(raster)
+nrow_raster <- nrow(raster)
+
+# Create an empty raster with the same extent and resolution
+raster_flipped <- rast(ncols=ncol_raster, nrows=nrow_raster, ext=ext(raster), crs=crs(raster))
+
+# Assign the flipped values back to the new raster
+values(raster_flipped) <- flipped_matrix
+
+
+
+
+
+#try different categorical layer
+
+stac_endpoint_url <- 'https://catalog.dive.edito.eu/'
+collects <- stac_endpoint_url %>%
+  stac() %>%
+  get_request()
+
+eunis <- collects$collections %>%
+  keep(~ str_detect(tolower(.x$title), "analysis"))
+
+q <- stac_search(q = stac(stac_endpoint_url),
+                 collections = "sea_water_potential_temperature") %>%
+  get_request()
+
+
+link <- q$features[[1]]$assets$Zarr$href
+dsn <- toGDAL(link)
+sdsn=sprintf('%s:/%s',dsn,"eunis_seabed_habitat_class_2019")
+sdsn
+rast(sdsn)
+
+s3 <- paws.storage::s3(credentials = list(anonymous = "logical"))
+read_zarr_array(link, s3_client = s3)
+
+
+
+#### tests ----
+b <- st_bbox(c(xmin = 16.1, xmax = 16.6, ymax = 48.6, ymin = 47.9))
+
+q <- stac(stac_endpoint_url) %>%
+  stac_search(collections = "emodnet-eunis_seabed_habitat_class_2019") %>%
+  get_request()
+
+lapply(q$features, \(x) names(x$properties))
+ext_filter()
+
+
+req <- stac("https://planetarycomputer.microsoft.com/api/stac/v1") %>%
+  stac_search(limit = 5)
+
+t <- req %>% ext_filter(
+  collection %in% c("landsat-c2-l2", "sentinel-2-l2a") &&
+    datetime > "2019-01-01" &&
+    datetime < "2019-06-01") %>%
+  post_request()
+
+
+
+req2 <- stac(stac_endpoint_url) %>%
+  stac_search(bbox = c(-10, 10, 62, 68) ,
+              datetime = "2020-01-01T00:00:00Z/2020-12-31T00:00:00Z",
+              limit = 2000) %>% 
+  get_request()
+
+filtered_list <- req2$features %>%
+  keep(~any(str_detect(.x$assets,"timeChunked.zarr")))
+
+map(filtered_list, \(x) x$properties$`moi:short_name`)
+
+filtered_list <- filtered_list %>%
+  keep(~str_detect(.x$properties$`moi:short_name`,"vo"))
+
+
+map_chr(filtered_list, "collection")
+
+l <-filtered_list[[1]]$assets$`arco-geo-series`$href
+dsn = toGDAL(l)
+sdsn = sprintf('%s:/%s',dsn,"vo")
+sdsn=sprintf('%s:%s',sdsn,1-1)
+sdsn=sprintf('%s:%s',sdsn,50-1)
+
+r = rast(sdsn)
+plot(r)
+
+
+req <- stac("https://planetarycomputer.microsoft.com/api/stac/v1") %>%
+  stac_search(limit = 5)
+req2 <- stac(stac_endpoint_url, force_version = "1.0.0") %>%
+  stac_search(limit = 5)
+
+# Equal operator '=' with collection property
+req %>% ext_filter(collection == "sentinel-2-l2a") %>% post_request()
+
+req2 %>% ext_filter(collection == "dfff7b6b-c6dd-5178-bc30-986c057325d0") %>% post_request()
+# req2 <- stac(stac_endpoint_url) %>%
+#   stac_search() %>%
+#   ext_filter(t_intersects(datetime, interval("1985-07-16T05:32:00Z",
+#                                              "1985-07-24T16:50:35Z"))
+#              ) %>%
+#   post_request(encode = "form")
+
+
+
+rstac::stac("https://planetarycomputer.microsoft.com/api/stac/v1") |>
+  rstac::ext_filter(
+    collection == "landsat-c2-l2" &&
+      t_intersects(datetime, )
+  )
+
+t2 <- req2 %>% 
+  ext_filter(collection == "emodnet-eunis_seabed_habitat_class_2019") %>% post_request()
+
+
+stac(stac_endpoint_url) %>%
+  ext_filter(collection == "emodnet-eunis_seabed_habitat_class_2019") %>% post_request()
+
+
+req2 %>% 
+  ext_filter(t_intersects(datetime, )) %>% post_request()
+
+req2 %>% 
+  stac_search(datetime %in% "2020-01-01/2020-01-31") %>% post_request()
+

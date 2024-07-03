@@ -314,17 +314,18 @@ load(file = "editostacv2.par")
 #in this case we work with monthly data (1 month = 30.436875*24*3600*1000 = 2629746000 milliseconds)
 timeSteps=c(2629746000)
 
+EDITOSTAC[which(EDITOSTAC$par == "elevation" & EDITOSTAC$asset == "Zarr"),c("latmin","latmax","lonmin","lonmax")] <- matrix(data = c(25,85,-36,43), nrow = 1)
 r <- getRasterSlice(requestedParameter = "elevation",
-                    lon_min = -13,
+                    lon_min = -10,
                     lon_max = 10,
-                    lat_min = 40,
-                    lat_max = 60,
+                    lat_min = 50,
+                    lat_max = 55,
                     requestedTimeSteps = NA,
                     date = "2020-01-01",
                     stacCatalogue = EDITOSTAC)
 
 # with predefined user input
-r <- getRasterSlice(requestedParameter = "elevation",
+r <- getRasterSlice(requestedParameter = "thetao",
                     lon_min = -13,
                     lon_max = 10,
                     lat_min = 40,
@@ -335,7 +336,9 @@ r <- getRasterSlice(requestedParameter = "elevation",
                     select_layers = 1)
 
 # with predefined user input
-r <- getRasterSlice(requestedParameter = "Substrate",
+EDITOSTAC[which(EDITOSTAC$par == "Energy" & EDITOSTAC$asset == "Zarr"),c("latmin","latmax","lonmin","lonmax")] <- matrix(data = c(20,80,-40,40), nrow = 1)
+EDITOSTAC[which(EDITOSTAC$par == "Energy" & EDITOSTAC$asset == "Zarr"),"par"] <- "seabed_energy"
+r <- getRasterSlice(requestedParameter = "seabed_energy",
                     lon_min = -13,
                     lon_max = 10,
                     lat_min = 40,
