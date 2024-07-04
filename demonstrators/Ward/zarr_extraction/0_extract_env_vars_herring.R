@@ -103,11 +103,11 @@ glimpse(enhanced_DF_depth)
 
 ## trials on extracting seabed habitat data
 # edit EDITOSTAC twice (should be solved)
-EDITOSTAC[which(EDITOSTAC$par == "EUNIS2019C" & EDITOSTAC$asset == "Zarr"),c("latmin","latmax","lonmin","lonmax")] <- matrix(data = c(48,62,-12,10), nrow = 1)
+EDITOSTAC[which(EDITOSTAC$par == "EUNIS2019C" & EDITOSTAC$asset == "Zarr"),c("latmin","latmax","lonmin","lonmax")] <- matrix(data = c(25,85,-36,43), nrow = 1)
 EDITOSTAC[which(EDITOSTAC$par == "EUNIS2019C" & EDITOSTAC$asset == "Zarr"),"par"] <- "eunis_seabed_habitat_class_2019"
-r <- getRasterSlice(requestedParameter = "eunis_seabed_habitat_class_2019", lon_min = -12, lon_max = 10, lat_min = 48, lat_max = 62, stacCatalogue = EDITOSTAC)
+r <- getRasterSlice(requestedParameter = "eunis_seabed_habitat_class_2019", lon_min = -36, lon_max = 43, lat_min = 25, lat_max = 85, stacCatalogue = EDITOSTAC)
 plot(r)
-
+writeRaster(r, "seabed_habitat.tif")
 
 
 #test on selecting specific categorical variable
@@ -336,17 +336,31 @@ r <- getRasterSlice(requestedParameter = "thetao",
                     select_layers = 1)
 
 # with predefined user input
-EDITOSTAC[which(EDITOSTAC$par == "Energy" & EDITOSTAC$asset == "Zarr"),c("latmin","latmax","lonmin","lonmax")] <- matrix(data = c(20,80,-40,40), nrow = 1)
+EDITOSTAC[which(EDITOSTAC$par == "Energy" & EDITOSTAC$asset == "Zarr"),c("latmin","latmax","lonmin","lonmax")] <- matrix(data = c(30,74.5,-36,41.7), nrow = 1)
 EDITOSTAC[which(EDITOSTAC$par == "Energy" & EDITOSTAC$asset == "Zarr"),"par"] <- "seabed_energy"
 r <- getRasterSlice(requestedParameter = "seabed_energy",
-                    lon_min = -13,
-                    lon_max = 10,
-                    lat_min = 40,
-                    lat_max = 60,
+                    lon_min = -36,
+                    lon_max = 41.7,
+                    lat_min = 30,
+                    lat_max = 74.5,
                     requestedTimeSteps = NA,
                     stacCatalogue = EDITOSTAC)
 
 plot(r)
+writeRaster(r, "seabed_energy.tif")
+
+EDITOSTAC[which(EDITOSTAC$par == "Substrate" & EDITOSTAC$asset == "Zarr"),c("latmin","latmax","lonmin","lonmax")] <- matrix(data = c(30,74.5,-36,41.7), nrow = 1)
+EDITOSTAC[which(EDITOSTAC$par == "Energy" & EDITOSTAC$asset == "Zarr"),"par"] <- "seabed_energy"
+r <- getRasterSlice(requestedParameter = "seabed_energy",
+                    lon_min = -36,
+                    lon_max = 41.7,
+                    lat_min = 30,
+                    lat_max = 74.5,
+                    requestedTimeSteps = NA,
+                    stacCatalogue = EDITOSTAC)
+
+plot(r)
+writeRaster(r, "seabed_energy.tif")
 
 #does not work
 extract(r, terra::buffer(vect(cbind(c(0,0),c(40,50)), crs="+proj=longlat"), mean, width = 100))
