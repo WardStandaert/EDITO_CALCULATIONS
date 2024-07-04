@@ -29,6 +29,7 @@ csl: apa.csl
   ```
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/home/onyxia/work/EDITO_CALCULATIONS/")
 
 # install and load packages
 pckgs <- c("arrow", "tidyverse", "doParallel", "rasterVis", "mapview", 
@@ -44,13 +45,13 @@ invisible(lapply(pckgs, library, character.only = TRUE))
 rm(pckgs)
 
 #Rarr package needs separate install
-# if (!require("BiocManager", quietly = TRUE))
-#   install.packages("BiocManager")
-# 
-# BiocManager::install("Rarr")
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("Rarr")
 library("Rarr")
 
-setwd("/home/onyxia/work/EDITO_CALCULATIONS/")
+
 ```
 
 # Introduction
@@ -83,8 +84,6 @@ df_occs <- eurobis |>
          observationdate <= as.POSIXct("2020-12-31")) |> 
   collect() 
 
-glimpse(df_occs)
-
 # select relevant variables from occurrence dataset
 df_occs <- df_occs %>% 
   dplyr::select(Latitude=latitude,
@@ -116,7 +115,7 @@ After removal of duplicates, `r nrow(df_occs)` occurrences are left.
 
 ## 1.3 Reduce sampling bias
 
-To account for sampling bias in the occurrence dataset, a spatial filtering technique is applied [@vollering2019bunching]. Here we thinned the occurrences so that each pair of occurrences has a minimum distance of 10 nautical miles or 18.52 km. This distance is the recommended distance between valid hauls in the DATRAS trawl surveys [@international2015manual].
+To account for sampling bias in the occurrence dataset, a spatial filtering technique is applied [@vollering2019bunching]. Here we thinned the occurrences so that each pair of occurrences has a minimum distance of 10 nautical miles or 18.52 km. This distance corresponds to the recommended distance between valid hauls in the DATRAS trawl surveys [@international2015manual].
 
 ```{r step 3}
 cl <- makeCluster(detectCores())
@@ -144,14 +143,11 @@ df_occs_thinned <-
     
   }
 
-save(df_occs_thinned, file = "data/df_thinned.Rdata")
 ```
 
 The thinning of the occurrences results in a remaining number of `r nrow(df_occs_thinned)` observations.
 
 ```{r step 3.2, fig.width = 7}
-load("data/df_thinned.Rdata")
-
 mapview(df_occs_thinned %>% dplyr::select(Longitude) %>% pull,
         df_occs_thinned %>% dplyr::select(Latitude) %>% pull,
         crs = "epsg:4326")
@@ -164,8 +160,9 @@ mapview(df_occs_thinned %>% dplyr::select(Longitude) %>% pull,
 
 We will use Maximum entropy (Maxent) models to fit the habitat suitability of herring larvae [@phillips2004maximum]. This approach makes use of background points instead of (pseudo-)absences to characterize the study area [@phillips2009sample]. The following chunk derives 10000 background points from within a buffer of 100 km around the occurrences [@barve2011crucial].
 
-```{r step 4, eval = FALSE}
+```{r step 4}
 set.seed(123)
+#this takes half a minute
 abs <- spatiotemp_pseudoabs(spatial.method = "buffer", temporal.method = "random",
                             occ.data = df_occs_thinned %>% mutate(x = Longitude, y = Latitude),
                             temporal.ext = c("2000-01-01", "2020-12-31"), spatial.buffer = 100000,
@@ -174,16 +171,15 @@ abs <- spatiotemp_pseudoabs(spatial.method = "buffer", temporal.method = "random
 glimpse(abs)
 ```
 
-For this example, we do not extrapolate the model to months where we have no information on the larvae. For this reason, the monthly values of the background points are limited to the months where occurrences of larvae are present.
+For this example, we do not extrapolate the model to months where we have no information on the larvae. For this reason, the background points are sampled from the months where occurrences of larvae are present.
 
-```{r step 4.2, eval = FALSE}
+```{r step 4.2}
 abs <- abs %>%
   mutate(month = sample(unique(df_occs_thinned$month), nrow(abs), replace = TRUE)) %>%
   mutate(Longitude = x, Latitude = y) %>%
   dplyr::select(-day, -x, -y)
 glimpse(abs)
 
-save(abs, file = "zarr_extraction/absences_save.Rdata")
 ```
 
 ## 1.5 Extract environmental values at occurrences and background points
@@ -194,24 +190,19 @@ Traditionally, this is proceeded by a cumbersome process of looking for and down
 
 The spatial resolution of environmental variables should match the resolution of the species records during species distribution modelling [@sillero2021common]. To solve this, environmental maps are traditionally resampled to the same resolution as the species records. The extraction method from .zarr files on EDITO allows the user to provide a buffer. When a buffer is provided, environmental values are not only extracted at the requested longitude, latitude and time coordinate but from all cells within the specified buffer around the location. Next, a user specified function (i.e. mean, max, min, median) is applied to these values to summarize this information into one value for each requested longitude, latitude and time coordinate. This way, an uncertainty is added to the location of the occurrence / (pseudo-)absence / background point. In this example, we apply a buffer of 10 NM, which is the resolution of the occurrence data.
 
-```{r step 5, eval = FALSE, results='hide'}
-load("zarr_extraction/SAVE/absences_save.Rdata")
+```{r step 5, results='hide'}
 
 #combine occurrences and background points
 df_occ_bg <- rbind(df_occs_thinned %>% mutate(presence = 1), 
                    abs %>% mutate(presence = 0))
-glimpse(df_occ_bg)
 
-
-source("zarr_extraction/editoTools.R")
+source("demonstrators/Ward/zarr_extraction/editoTools.R")
 options("outputdebug"=NULL)
-load(file = "zarr_extraction/editostacv2.par")
 
-##TODO: ADD ELEVATION, WINDFARMS AND SEABED SUBSTRATE ENERGY ------
-parameters = list("thetao"= c("par" = "thetao", "fun" = "mean", "buffer" = "10000"),
-                  "so"= c("par" = "so", "fun" = "mean", "buffer" = "10000"),
-                  "zooc"= c("par" = "zooc", "fun" = "mean", "buffer" = "10000", "convert_from_timestep" = 86400000),
-                  "phyc"= c("par" = "phyc", "fun" = "mean", "buffer" = "10000"))
+parameters = list("thetao"= c("par" = "thetao", "fun" = "mean", "buffer" = "18000"),
+                  "so"= c("par" = "so", "fun" = "mean", "buffer" = "18000"),
+                  "zooc"= c("par" = "zooc", "fun" = "mean", "buffer" = "18000", "convert_from_timestep" = 86400000),
+                  "phyc"= c("par" = "phyc", "fun" = "mean", "buffer" = "18000"))
 
 #check if they are all available in the data lake
 for (parameter in parameters) {
@@ -220,6 +211,7 @@ for (parameter in parameters) {
 }
 
 #extract function (requires POSIXct Time column)
+#this takes about 8 minutes for 14000 points
 df_occ_bg_env = enhanceDF(inputPoints = df_occ_bg %>% 
                             mutate(Time = as.POSIXct(paste(year,month,1,sep = "-"))),
                           requestedParameters = parameters,
@@ -233,8 +225,6 @@ df_occ_bg_env <- df_occ_bg_env %>% dplyr::select(presence, Longitude, Latitude, 
 
 # remove observations where no environmental values were present
 df_occ_bg_env <- drop_na(df_occ_bg_env)
-
-
 
 # ## TODO remove this part ----
 # substr_lvl <- tibble(sub_char = c("Fine mud", "Sand", "Muddy sand", "Mixed sediment",
@@ -251,28 +241,23 @@ df_occ_bg_env <- drop_na(df_occ_bg_env)
 #   dplyr::select(-seabed_energy, -seabed_substrate) %>%
 #   mutate(windfarms = as.factor(windfarms))
 
-save(df_occ_bg_env, file = "zarr_extraction/SAVE/pres_abs_env_save_EditoTools.Rdata")
 ```
 
 ``` {r step 5.2}
-load("zarr_extraction/SAVE/pres_abs_env_save_EditoTools.Rdata")
 table(df_occ_bg_env$presence)
-#    0    1 
-# 8038 3991
 ```
 
 ## 1.6 Model creation using ENMeval
 
 Maxent can be tailored by combining different feature classes and regularization multipliers [@phillips2006modelling]. Fifteen combinations were tested using the corrected Akaike's Information Criterion (AICc) as a selection criterion [@zeng2016novel].
 
-```{r step 6, eval = FALSE}
-load(file = "zarr_extraction/SAVE/pres_abs_env_save_EditoTools.Rdata")
-
+```{r step 6}
 glimpse(df_occ_bg_env)
 
 # input for ENMevaluate requires lon & lat as first covariates
 
 #test different model settings using ENMeval
+#this takes about 13 mins
 model_fit <- ENMeval::ENMevaluate(occs = df_occ_bg_env %>%                                    
                                     filter(presence == 1) %>% 
                                     dplyr::select(Longitude, Latitude, thetao, so, zooc, phyc),
@@ -285,16 +270,11 @@ model_fit <- ENMeval::ENMevaluate(occs = df_occ_bg_env %>%
                                   partitions = "randomkfold",
                                   doClamp = TRUE,
                                   parallel = TRUE)
-
-
-save(model_fit, file = "zarr_extraction/SAVE/model_fit_save_EditoTools.Rdata")
 ```
 
 The default output of the *ENMeval* package shows the Area Under the Curve of the Receiver Operating Characteristic plot (AUC) metric as an evaluation metric. This metric was derived using a 5-fold cross validation.
 
 ```{r step 7.2}
-load("zarr_extraction/SAVE/model_fit_save_EditoTools.Rdata")
-
 print(model_fit %>% eval.results() %>% filter(delta.AICc == 0))
 ```
 
@@ -305,8 +285,6 @@ The outcomes show that the lowest AICc score is achieved using a regularization 
 Visualize the partial response curves of the occurrence of larvae of herring per environmental variable, using a bootstrapping method derived from @thuiller2009biomod.
 
 ```{r step 10, warning=FALSE}
-load(file = "zarr_extraction/SAVE/pres_abs_env_save_EditoTools.Rdata")
-
 #derive optimal model results
 eval_res <- model_fit
 opt.aicc <- eval.results(model_fit) %>% filter(delta.AICc == 0)
@@ -314,6 +292,7 @@ mod <- eval_res@models[[which(names(eval_res@models) == opt.aicc$tune.args)]]
 
 #variables as defined in the model
 vs <- c("thetao", "so", "phyc", "zooc")
+
 #variables names for the plot
 name_key <- data.frame(old = c("thetao", "so", "phyc", "zooc"),
                        new = c("Sea surface temperature (°C)%", "Sea surface salinity (PSU)%", 
@@ -381,9 +360,6 @@ Finally, we want to make spatial predictions for the habitat suitability in the 
 First, maps are derived from the .zarr files in the datalake at a given time and between a set of longitude and latitudes (defined by the study area).
 
 ```{r step 8, results='hide'}
-source("zarr_extraction/editoTools.R")
-load(file = "zarr_extraction/editostacv2.par")
-
 variables <- c("thetao", "so", "phyc", "zooc")
 
 # files <- tibble(name = list.files("data/raster_slices/", pattern = ".tif|.grd", full.names = TRUE),
@@ -435,7 +411,6 @@ plot(st[[1]])
 Spatial predictions are restricted to the months were occurrence data of herring larvae is available (September, October, December and January). This is the same period where autumn-spawning herring spawn.
 
 ```{r step 9}
-
 predictions <- stack()
 for (d in 1:4) {
   pred_m <- predict(st[[d]], mod, clamp=T, type="cloglog")

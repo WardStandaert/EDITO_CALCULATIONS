@@ -1,25 +1,17 @@
-#toolbox to interact with the edito data lake ARCO data
-#use enhanceDF() to extract data for a set  of records with the fields Latitude,Longitude,Time
-#set of functions to harvest the stac catalog of edito, and lookup info from the zarr metadata
-
-
 library(foreach)
 library(doParallel)
 library(stars)
-
-
 library(terra)
 library(magrittr)
 library(dplyr)
 library(Rarr)
 library(stringr)
 library(lubridate)
-
 library(arrow)
+
 
 #function used to specify an s3 client based on the path, and assuming anonymous access, 
 #required for the rarr functions because of a conflict with S3 credentails specified on the data lab virtual machines 
-
 s3_client <- function(endpoint) {paws.storage::s3(
   config = list(
     credentials = list(anonymous = TRUE), 
@@ -28,13 +20,8 @@ s3_client <- function(endpoint) {paws.storage::s3(
 )}
 
 
-acf <- S3FileSystem$create(
-  scheme = "https",
-  endpoint_override = "s3.waw3-1.cloudferro.com",
-  anonymous = T
-)
-
-
+#retrieve STAC catalog in EDITOSTAC
+acf <- S3FileSystem$create(scheme = "https", endpoint_override = "s3.waw3-1.cloudferro.com", anonymous = T)
 EDITOSTAC = arrow::open_dataset(acf$path("emodnet/edito_stac_cache.parquet")) %>% collect()
 
 
@@ -45,24 +32,22 @@ closest<-function(xv,sv){
 
 #wrap a gdal request string
 toGDAL<-function(fn,par=""){
-  
   if(par!="") url=sprintf('ZARR:"/vsicurl?list_dir=no&retry_delay=60&max_retry=3&url=%s":/%s',fn,par)
   else   url= sprintf('ZARR:"/vsicurl?list_dir=no&retry_delay=60&max_retry=3&url=%s"',fn)
-  dbl(url)
   return(url)
 }
 
 
+#derive info
 gdalinfo<-function(fn,par=""){
   url=toGDAL(fn,par)
   jsonlite::fromJSON(gdal_utils('mdiminfo', url, quiet = T))
 }
 
 
-#function to track and report progress including from forked processes
+#track and report progress including from forked processes
 options("outputdebug"=c('L','M'))
 loglist=""
-
 dbl<-function(...){
   m=paste(Sys.time(), ":", ..., sep=" ", collapse= "\t") 
   if(...length()==0) loglist<<-""
@@ -72,46 +57,7 @@ dbl<-function(...){
 }
 
 
-#function to convert time to seconds since 1970-01-01
-#specially cmems uses all kinds of origins and units
-num2dt<-function(n, unit='seconds since 1970-01-01'){
-  "hours since 1950-01-01"
-  
-  origin="1970-01-01"
-  if(stringr::str_detect(unit,"2000-01-01")) origin="2000-01-01"
-  else if(stringr::str_detect(unit,"1970-01-01")) origin="1970-01-01"
-  else if(stringr::str_detect(unit,"1950-01-01")) origin="1950-01-01"
-  
-  m=1
-  if(stringr::str_detect(unit,"milliseconds"))  m=1000
-  if(stringr::str_detect(unit,"hours"))         m=1/3600
-  if(stringr::str_detect(unit,"minutes"))       m=1/60
-  
-  return(as.POSIXct(n/m,origin=origin,tz='Z'))
-}
-
-
-#used in parallel processing;  drop results of uncomplete parameter instead of losing all data
-Combine<-function(lx,ly)
-{
-  if(length(lx)==0) return(ly)
-  if(is.null(lx$df) || nrow(lx$df)==0)
-  { lx$log$progess=paste(lx$log$progess, "first table is empty")
-  return(list('log'=append(lx$log,list(ly$log))  , 'df'= ly$df)) 
-  }
-  if(is.null(ly$df) || nrow(ly$df)==0)
-  { 
-    return(list('log'=append(lx$log,list(ly$log))  , 'df'= lx$df)) 
-  }
-  if(nrow(lx$df)!=nrow(ly$df) )
-  { ly$log$progess=paste(ly$log$progress, paste("new dataframe has different rowcount ", nrow(lx$df), "><", nrow(ly$df) ), sep='\n')
-  return(list('log'=append(lx$log,list(ly$log))  , 'df'= lx$df)) 
-  }
-  list('log'=append(lx$log,ly$log), 'df'= dplyr::bind_cols(lx$df,ly$df) )
-}
-
-
-#used in parallel processing;  drop results of uncomplete parameter instead of losing all data
+#used in parallel processing; drop results of incomplete parameter instead of losing all data
 CombineC<-function(lx,ly)
 {
   if(length(lx)==0) return(ly)
@@ -136,19 +82,15 @@ CombineC<-function(lx,ly)
 # needs error trapping 
 CombineR<-function(x,y)
 {
-  dbl("x= ", nrow(x),"y= ", nrow(y))
   if(is.null(x)) return(y)
   
   dplyr::bind_rows(x,y)
 }
 
-
-
 #function to retry reading from aws s3, because sometime it just fails, without reason 
 #reads json and makes a named list
 retryJson<-function(url){
-  dbl(url)
-  
+
   resp=httr::RETRY(url=url,verb='GET',times=3, encode='json', httr::content_type('json'))
   if(resp$status_code!=200)
     return("")
@@ -196,7 +138,16 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
   
   r=rast(sdsn)
   
-  if(isCategory)  r=flip(r, "vertical")
+  if(isCategory)  {#r=terra::flip(r, "vertical") --> currently does not work
+    #manually flip raster
+    r <- read_stars(sdsn,driver = "zarr")
+    values_matrix <- as.matrix(r[[1]])
+    flipped_matrix <- values_matrix[, ncol(values_matrix):1]
+    raster_flipped <- st_as_stars(flipped_matrix)
+    st_dimensions(raster_flipped) <- st_dimensions(r)
+    r <- st_as_stars(raster_flipped)
+    r <- as(r, "SpatRaster")
+  }
   
   if(crs(r)=="") {
     dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
@@ -207,36 +158,61 @@ getParFromZarrwInfo<-function(usePar, coords, atTime, atDepth, zinfo, isCategory
   parTabel=dplyr::tibble()
   
   try({
-    #simple extract function if there is no buffer provided
+
+    #1. no buffer is provided
     if(!"buffer" %in% names(params)) {
       parTabel=terra::extract(x = r, y = dplyr::select(coords,x,y), ID= F, xy=T) 
-    } else {  #if buffer value is provided
+    } 
+    #2. buffer value is provided
+    else {  
       bufferSize = as.numeric(params[["buffer"]])
       fun = params[["fun"]]
       bufferedY = terra::buffer(vect(cbind(coords$x, coords$y), crs="+proj=longlat"), bufferSize)
       
+      # categorical variable
       # derive the most frequent category for categorical variables
       if(isCategory) {
-        dbl("using most frequent value in buffer to look up categorical data")
-        
-        par2 = terra::extract(x=r, y=bufferedY, table , na.rm=T)
-        parTabel = cbind(as.numeric(colnames(par2)[max.col(par2)]), dplyr::select(coords,x,y))
-      } else if (!"convert_from_timestep" %in% names(params)) {
-        dbl("using buffer to look up data")
-        
-        parTabel = cbind(terra::extract(x=r, y=bufferedY, fun, na.rm=T, ID= F),
-                         dplyr::select(coords,x,y))
-      } else {
-        #an averaging needs to be done towards a more coarse timestep
-        for(d in 1:lubridate::days_in_month(atTime)) {
-          closest_time=closest(zinfo$times,atTime + lubridate::days(d) - 1)
-          sdsn_d=sprintf('%s:%s',sdsn_par,max(closest_time-1,1))
-          r_d = rast(sdsn_d)
-          if(d == 1) r = r_d
-          else r = c(r, r_d)
+        if(params[["fun"]] == "most_frequent") {
+          dbl("using most frequent value in buffer to look up categorical data")
+          
+          parTabel = cbind(as.numeric(colnames(par2)[max.col(par2)]), dplyr::select(coords,x,y))}
+        else if(params[["fun"]] == "exact") {
+          if(!"category" %in% names(params)) {
+            dbl("please provide a category to match to")
+            stop()
+          }
+          dbl("calculating percentage area in buffer matching provided category")
+          
+          par2 = terra::extract(x=r, y=bufferedY, table , na.rm=T)
+          row_sums <- rowSums(par2[, sapply(par2, is.numeric)])
+          par2_percent <- par2[, sapply(par2, is.numeric)] / row_sums
+          # select category that was asked for
+          
+          parTabel = cbind(par2_percent[,which(names(par2_percent) == params[["category"]])], 
+                           dplyr::select(coords,x,y))
         }
-        parTabel = cbind(rowMeans(terra::extract(x=r, y=bufferedY, fun, na.rm=T, ID= F)),
-                         dplyr::select(coords,x,y))
+      } 
+      # numerical variable
+      else {
+        # regular extraction with specified fun
+        if (!"convert_from_timestep" %in% names(params)) {
+          dbl("using buffer to look up data")
+          
+          parTabel = cbind(terra::extract(x=r, y=bufferedY, fun, na.rm=T, ID= F),
+                           dplyr::select(coords,x,y))
+        } 
+        # an averaging needs to be done towards a coarser time step before extraction
+        else {
+          for(d in 1:lubridate::days_in_month(atTime)) {
+            closest_time=closest(zinfo$times,atTime + lubridate::days(d) - 1)
+            sdsn_d=sprintf('%s:%s',sdsn_par,max(closest_time-1,1))
+            r_d = rast(sdsn_d)
+            if(d == 1) r = r_d
+            else r = c(r, r_d)
+          }
+          parTabel = cbind(rowMeans(terra::extract(x=r, y=bufferedY, fun, na.rm=T, ID= F)),
+                           dplyr::select(coords,x,y))
+        }
       }
     }
   }, silent=T)
@@ -359,7 +335,6 @@ getLastInfoFromZarr<-function(href,ori=NULL)
   
   if(is.null(zi$latstep) | is.null(zi$latmin)) 
   {
-    dbl("getting step metadata from arrays")
     zi$latmin = read_zarr_array(sprintf("%s%s", href, '/latitude' ), index=list(1), s3_client = s3_client(endpoint))
     zi$latsize=(meta$dimensions %>% dplyr::filter(name=='latitude'))$size
     
@@ -385,7 +360,22 @@ getLastInfoFromZarr<-function(href,ori=NULL)
   #is there a time component
   if('time' %in% meta$dimensions$name)
   {
-    zi$times=num2dt( read_zarr_array(sprintf("%s%s", href, '/time' ), index=list(1:meta$arrays$time$dimension_size) , s3_client = s3_client(endpoint)) , meta$arrays$time$unit )
+    if(!is.character(meta$arrays$time$unit)) unit='seconds since 1970-01-01'
+    else unit=meta$arrays$time$unit 
+
+    origin="1970-01-01"
+    if(stringr::str_detect(unit,"2000-01-01")) origin="2000-01-01"
+    else if(stringr::str_detect(unit,"1970-01-01")) origin="1970-01-01"
+    else if(stringr::str_detect(unit,"1950-01-01")) origin="1950-01-01"
+    
+    m=1
+    if(stringr::str_detect(unit,"milliseconds"))  m=1000
+    if(stringr::str_detect(unit,"hours"))         m=1/3600
+    if(stringr::str_detect(unit,"minutes"))       m=1/60
+    
+    zi$times = as.POSIXct(read_zarr_array(sprintf("%s%s", href, '/time'), index=list(1:meta$arrays$time$dimension_size), s3_client = s3_client(endpoint))/m,
+                          origin=origin,
+                          tz='Z')
   }
   
   if('elevation' %in% meta$dimensions$name)
@@ -397,7 +387,7 @@ getLastInfoFromZarr<-function(href,ori=NULL)
   zi$meta=meta
   zi$href=href
   
-  return(zi )
+  return(zi)
 }
 
 
@@ -412,8 +402,7 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
   
   registerDoParallel(cores=16)
   mcoptions=list(preschedule=F, silent=F)
-  dbl("workers:",getDoParWorkers())
-  
+
   #depending on the time resolution of the dataset, calculate a period to group points by timeslice
   #for some parameters we have climatology data that can be per month and other timesteps.. so check only the first one will not work..
   
@@ -444,7 +433,7 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
     pts$Period=lubridate::round_date(pts$Time,units)
     #difference between consecutive times.. needed to group in slices
     
-    dbl("ds timestep=", step, "rounded to ", units)
+    dbl("Product timestep:", units)
     }  
   }
   #parameter has no timeresolution eg bathymetry
@@ -466,7 +455,7 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
   if("Time" %in% colnames(pts))
   {
     pts$diff= as.numeric(difftime(pts$Time,pts$Time[1], 'secs'))
-    pts$Slice=cumsum(c(T, diff(pts$diff) > 24*60*60 )) # threshold of days
+    pts$Slice=cumsum(c(T, diff(pts$diff) > 24*60*60)) # threshold of days
     locs=dplyr::group_by(pts,Longitude,Latitude,Slice) %>% dplyr::summarise(from=min(Period),till=max(Period), cnt=n(), .groups='drop')
   }
   else
@@ -476,9 +465,7 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
   lookup=c("Time","Longitude","Latitude","loop","method")
   names(lookup)=c(sprintf("vb_%s_t", param),sprintf("vb_%s_x", param),sprintf("vb_%s_y",param),sprintf("vb_%s_l",param),sprintf("vb_%s_m",param))
   
-  dbl(length(periods), " time periods" , nrow(locs)," unique points zarr=", dsng )
-  
-  if(  nrow(locs) < length(periods ) ) {
+  if(nrow(locs) < length(periods)) {
     #loop locations
     resulting= foreach(p=1:nrow(locs),.options.multicore=mcoptions, .combine='CombineR', .packages = c("terra","stars","magrittr","dplyr","Rarr")) %dopar% 
       { 
@@ -504,7 +491,6 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
         tble=NULL
         
         thistble=dplyr::filter(pts,Period==periods[p])
-        dbl(periods[p], " rec:", nrow(thistble))
         
         if(nrow(thistble)>0) 
         {
@@ -525,12 +511,9 @@ lookupParameter<-function(dslist=NULL, usePar, pts, atDepth=0)
         tble=dplyr::rename(tble, any_of(lookup))
         tble
       }
-    dbl("terra extracted tble: ", nrow(resulting))
-    
   }  
   resulting = cbind(pts,  resulting  )
   
-  dbl("par:", param, "records: ", nrow(resulting))
   newpiece=list(usePar=list("href"= dsng, "par"=param,"nr"= nrow(resulting),"points"=nrow(locs),"periods"=length(periods),"stacinfo"= dplyr::slice(dslist,1),"zarrmeta"=zinfo$meta ,"progress"=loglist ) )
   names(newpiece)=c(param)
   
@@ -579,9 +562,8 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     
     param = ifelse(length(parameter)==1, parameter, parameter[[1]])
     
-    dbl()
-    dbl("par:",param)
-    
+    dbl("Deriving",param)
+
     #check available zarr assets in the stack catalogue for the region and period in the data file
     #order by resolution and take the first record
     
@@ -614,7 +596,7 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
     {
       tlist=dplyr::filter(dslist, timestep %in% requestedTimeSteps)
       if("convert_from_timestep" %in% names(parameter)) {
-        dbl(paste0("Converting timestep ", requestedTimeSteps, " into ", as.numeric(parameter["convert_from_timestep"])))
+        dbl(paste0("Converting original product with timestep ", as.numeric(parameter["convert_from_timestep"]), " towards a timestep of ", requestedTimeSteps))
         requestedTimeSteps2 = as.numeric(parameter["convert_from_timestep"])
         tlist=dplyr::filter(dslist, timestep %in% requestedTimeSteps2)
       }
@@ -668,7 +650,7 @@ enhanceDF<-function(inputPoints, requestedParameters, requestedTimeSteps, stacCa
   #clean up
   rm(pts)
   
-  print(paste0("Extraction done. The following datasets were used: ", paste(sources, collapse = ", ")))
+  message(paste0("Extraction done. The following datasets were used:\n - ", paste(sources, collapse = "\n - ")))
   return(inputPoints)
   
 }
@@ -721,6 +703,7 @@ getRasterSlice <- function(requestedParameter='thetao', lon_min=-10, lon_max=10,
   else if(!is.null(select_layers))  dslist <- dslist[select_layers,]
   
   zinfo=getLastInfoFromZarr(dslist$href[1], dslist$ori[1])
+  isCategory =  (!dslist$categories[1] %in% c(NA,0)) 
   
   dsn=toGDAL(zinfo$href)
   
@@ -754,8 +737,17 @@ getRasterSlice <- function(requestedParameter='thetao', lon_min=-10, lon_max=10,
   }
   
   r=rast(sdsn)
-  # temporary hack
-  if(str_detect( zinfo$href, "euseamap")) r=flip(r,direction="vertical")
+
+  if(isCategory)  {#r=terra::flip(r, "vertical") --> currently does not work
+    #manually flip raster
+    r <- read_stars(sdsn,driver = "zarr")
+    values_matrix <- as.matrix(r[[1]])
+    flipped_matrix <- values_matrix[, ncol(values_matrix):1]
+    raster_flipped <- st_as_stars(flipped_matrix)
+    st_dimensions(raster_flipped) <- st_dimensions(r)
+    r <- st_as_stars(raster_flipped)
+    r <- as(r, "SpatRaster")
+  }
   
   dbl("extent and coordinate system missing, assuming epsg:4326, extent from stac catalogue")
   crs(r)='epsg:4326'

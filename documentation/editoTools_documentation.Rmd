@@ -1,0 +1,138 @@
+---
+title: "Documentation editoTools"
+output: html_document
+date: "2024-07-01"
+---
+
+Hi, feel free to paste the documentation of your functions in here!
+
+# enhanceDF()
+
+**Description**\
+Extracts specific environmental information from the data lake at specific coordinates of your data points.
+
+**Usage**
+
+```{r, eval=FALSE}
+enhanceDF(inputPoints, requestedParameters, requestedTimeSteps, stacCatalogue, verbose, atDepth, select_layers)
+```
+
+**Arguments**
+
+-   inputPoints: A data frame of presences/absences with the columns "Latitude", "Longitude", and optionally "Time"
+-   requestedParameters: A named list of parameters with each parameter containing named vector with info on "par" (required), "buffer", "fun", "category" and "convert_from_timestep" (optional). Only providing "par" simply extracts the value of the requested parameter at the closest Longitude, Latitude, Time and atDepth. The optional arguments allow for more complex queries (see details).
+-   requestedTimeSteps: An integer in seconds specifying the temporal resolution (e.g 86400000 for daily)
+-   stacCatalogue: A data frame of the STAC Catalog, containing the URL's to the datasets and metadata information
+-   verbose: Character of either "on" or "". When verbose = "on", columns *par*\_x, *par*\_y, *par_z, par*\_t are added to the output data frame to show the location, depth and time where the environmental data was extracted from.
+-   atDepth: A numerical indicating the requested depth from where to extract from. For each parameter in requestedParameters, the function extracts values at the depth layer of this parameter that is closest to atDepth.
+-   select_layers: *Only to use on second iteration of the function.* A vector with integers indicating which product with length n (with n the number of parameters). This argument allows to predefine for every parameter which product you want to use in case when there are multiple options. When left empty, the function will ask user input for each layer where multiple products are available for the given parameter and range of longitude, latitude and time.
+
+**Format**\
+A data frame.
+
+**Details**\
+Depends on the function `lookupParameter()`.
+
+A buffer lookup can be done by providing a buffer value (in meters) for each parameter in requestedParameters and a function (fun) that is applied to this buffer. For example, buffer = 10000 and fun = "mean", will calculate the average value of a buffer of 10000 m around each point in inputPoints. Fun can be given any regular function such as "mean", "median", "min" or "max". For categorical variables, fun can be either "most_frequent" (derives the most frequent category in the buffer) or "exact". Exact can be used when a specific category is searched for (provided in "category") and will return the percentage area covered by the specified "category" in the buffer area.\
+"convert_from_timestep" provides an option to derive data at a resolution that is coarser than the product listed in the catalogue. For example, with "requestedTimeSteps"=***NA*** "convert_from_timestep"=86400000, monthly values are extracted from a product that has a daily timestep in the data lake. Currently, only the conversion of daily to monthly data is implemented.
+
+**Value**\
+A data frame consisting of the original inputPoints appended by columns of parameter values.
+
+**Examples**
+
+```{r, eval=FALSE}
+parameters <- list("thetao"= c("par" = "thetao", "buffer" = "10000", "fun" = "mean"),
+                   "so"= c("par" = "so", "buffer" = "10000", "fun" = "mean"),
+                  "npp"= c("par" = "npp", "buffer" = "10000", "fun" = "mean","convert_from_timestep" = "86400000"))
+
+df_occ_bg_env = enhanceDF(inputPoints = df_occs %>% 
+                            mutate(Time = as.POSIXct(paste(year,month,1,sep = "-"))),
+                          requestedParameters = parameters,
+                          requestedTimeSteps = NA,
+                          stacCatalogue = EDITOSTAC,
+                          verbose="on",
+                          select_layers=NULL)
+```
+
+# lookupParameter()
+
+**Description**\
+*Helper function*. Extracts environmental information from one specific product.
+
+**Usage**
+
+```{r, eval=FALSE}
+lookupParameter(dslist, usePar, pts, atDepth)
+```
+
+**Arguments**
+
+-   dslist: A vector specifying a specific product from the data lake as defined in STAC catalog (EDITOSTAC), the coordinates where to extract this value and optionally also a depth.
+-   usePar: A vector including the parameter name (required), and other settings buffer, fun and category (optional). See details in `enhanceDF()`.
+-   pts: A data frame of presences/absences with the columns "Latitude", "Longitude", and "Time" (optional).
+-   atDepth: A numerical indicating the requested depth from where to extract from.
+
+**Value**\
+A data frame consisting of the original inputPoints appended by columns of environmental parameter values.
+
+# getLastInfoFromZarr()
+
+**Description**
+
+*Helper function*. Derives info on the zarr file specified in href.
+
+**Usage**
+
+```{r, eval=FALSE}
+getLastInfoFromZarr(href, ori)
+```
+
+**Arguments**
+
+-   href: URI to the zarr file
+-   ori: URI to aws s3
+
+**Value**
+
+A list with available metadata on coordinates, timeframe, the environmental parameter, ...
+
+# getParFromZarrwInfo()
+
+**Description**
+
+*Helper function*. Extraction function to derive multiple locations at one timestep.
+
+**Usage**
+
+```{r, eval=FALSE}
+getParFromZarrwInfo(usePar, coords, atDepth, zinfo, isCategory)
+```
+
+**Arguments**
+
+-   usePar: A vector including the parameter name (required), and other settings buffer, fun and category (optional). See details in `enhanceDF()`.
+-   coords: A data frame of presences/absences with the columns "x", "y".
+-   atDepth: A numerical indicating the requested depth from where to extract from.
+-   zinfo: Output from `getLastInfoFromZarr()`
+-   isCategory: Logical. `TRUE` if the requested variable is a categorical one.
+
+# getTimeSeriesFromZarr()
+
+**Description**
+
+*Helper function*. Extraction function to derive multiple timesteps at one location.
+
+**Usage**
+
+```{r, eval=FALSE}
+getTimeSeriesFromZarr(usePar, coords, from, till, zinfo)
+```
+
+**Arguments**
+
+-   usePar: A vector including the parameter name (required), and other settings buffer, fun and category (optional). See details in `enhanceDF()`.
+-   coords: A data frame of presences/absences with the columns "x", "y".
+-   from: A date. Start date of extraction.
+-   till: A date. End date of extraction.
+-   zinfo: A list. Output from `getLastInfoFromZarr()`
