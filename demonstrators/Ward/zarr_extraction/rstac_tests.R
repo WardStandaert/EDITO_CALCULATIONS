@@ -19,13 +19,9 @@ q <- stac_search(q = stac(stac_endpoint_url),
 
   get_request()
 
-eunis$links %>%
-  keep(~ .x)
-c('child','item')
-
 href <- keep(eunis$links, ~ str_detect(.x$rel, 'child|item')) %>%
   .[[1]] %>%
-  .[["href"]] %>% items_fetch()
+  .[["href"]]
 href
 retryJson(href)
 
@@ -245,3 +241,48 @@ req2 %>%
 
 req2 %>% 
   stac_search(datetime %in% "2020-01-01/2020-01-31") %>% post_request()
+
+
+
+### rstac tutorial ----
+library("sf")
+library("terra")
+
+stac_endpoint_url <- 'https://catalog.dive.edito.eu/'
+stac_source <- stac(stac_endpoint_url)
+coll_q <- stac_source |>
+  collections() |>
+  get_request() 
+
+stac_search(q = stac_source, 
+            collections = "sea_water_potential_temperature",
+            limit = 999)
+b <- st_bbox(c(xmin = 16.1, xmax = 16.6, ymax = 48.6, ymin = 47.9))
+t <- stac_search(q = stac_source, 
+            collections = "sea_water_potential_temperature",
+            limit = 999,
+            bbox = b)
+
+signed_stac_query <- items_sign(t, sign_planetary_computer())
+signed_stac_query
+#does not work
+assets_download(signed_stac_query, output_dir = "C:/Users/ward.standaert/Desktop/rstac/")
+
+h_url <- assets_url(t)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
