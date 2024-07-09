@@ -41,6 +41,10 @@ seab
 # new endpoint ----
 stac_endpoint_url <- 'https://catalog.dive.edito.eu/'
 
+# q <- stac_search(q = stac(stac_endpoint_url), limit = 5000) |> get_request()
+# 
+# map_chr(q$features, \(x) x$collection)
+
 #does not work - query for correct product / collection
 # collects <- stac_endpoint_url %>%
 #   stac() %>%
@@ -75,6 +79,26 @@ sdsn=sprintf('%s:/%s',dsn,"seabed_energy")
 sdsn
 r <- rast(sdsn)
 crs(r) <- "epsg:4326"
+plot(flip(r))
+
+#COPERNICUS layer
+# does not work --> how to find collection id?
+q <- stac_search(q = stac(stac_endpoint_url),
+                 collections = "climate_forecast-sea_water_speed") %>%
+  get_request()
+
+#create link and extract raster
+link <- rstac::assets_url(q, "Zarr")
+#look at what data sets are in there
+names(gdalinfo(link)$arrays)
+
+#still uses EditoTools
+dsn <- toGDAL(link)
+sdsn=sprintf('%s:/%s',dsn,"...")
+sdsn
+r <- rast(sdsn)
+crs(r) <- "epsg:4326"
+plot(r)
 plot(flip(r))
 
 
