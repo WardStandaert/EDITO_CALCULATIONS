@@ -1,5 +1,6 @@
 library(rstac)
 library(purrr)
+source("demonstrators/Ward/zarr_extraction/editoTools.R")
 # staging endpoint ----
 stac_endpoint_url <- 'https://catalog.staging.edito.eu'
 
@@ -39,14 +40,15 @@ seab
 
 # new endpoint ----
 stac_endpoint_url <- 'https://catalog.dive.edito.eu/'
-#looking for correct name
-collects <- stac_endpoint_url %>%
-  stac() %>%
-  get_request()
 
-eunis <- collects$collections %>%
-  keep(~ str_detect(tolower(.x$title), "seabed_energy")) %>%
-  .[[1]]
+#does not work - query for correct product / collection
+# collects <- stac_endpoint_url %>%
+#   stac() %>%
+#   get_request()
+# 
+# eunis <- collects$collections %>%
+#   keep(~ str_detect(tolower(.x$title), "seabed_energy")) %>%
+#   .[[1]]
 
 #request layer
 q <- stac_search(q = stac(stac_endpoint_url),
@@ -54,14 +56,32 @@ q <- stac_search(q = stac(stac_endpoint_url),
   get_request()
 
 #create link and extract raster
-link <- q$features[[1]]$assets$Zarr$href
+link <- rstac::assets_url(q, "Zarr")
+#look at what data sets are in there
+names(gdalinfo(link)$arrays)
+
+#still uses EditoTools
 dsn <- toGDAL(link)
-sdsn=sprintf('%s:/%s',dsn,"eunis_seabed_habitat_class_2019")
+sdsn=sprintf('%s:/%s',dsn,"marine_strategy_framework_directive_benthic_broad_habitat_type")
 sdsn
 r <- rast(sdsn)
+crs(r) <- "epsg:4326"
 plot(r)
-plot(raster.invert(r))
 plot(flip(r))
+
+#still uses EditoTools
+dsn <- toGDAL(link)
+sdsn=sprintf('%s:/%s',dsn,"seabed_energy")
+sdsn
+r <- rast(sdsn)
+crs(r) <- "epsg:4326"
+plot(flip(r))
+
+
+
+
+
+
 
 
 library(stars)
@@ -255,34 +275,105 @@ coll_q <- stac_source |>
   get_request() 
 
 stac_search(q = stac_source, 
-            collections = "sea_water_potential_temperature",
+            collections = "eunis_seabed_habitat_class_2019",
             limit = 999)
 b <- st_bbox(c(xmin = 16.1, xmax = 16.6, ymax = 48.6, ymin = 47.9))
 t <- stac_search(q = stac_source, 
-            collections = "sea_water_potential_temperature",
+            collections = "emodnet-eunis_seabed_habitat_class_2019",
             limit = 999,
-            bbox = b)
+            bbox = b) %>% get_request()
+
+stac_search(q = stac_source, 
+            collections = "emodnet-eunis_seabed_habitat_class_2019",
+            limit = 999,
+            bbox = b) %>% get_request()
 
 signed_stac_query <- items_sign(t, sign_planetary_computer())
 signed_stac_query
 #does not work
-assets_download(signed_stac_query, output_dir = "C:/Users/ward.standaert/Desktop/rstac/")
+assets_download(signed_stac_query, output_dir = "demonstrators/Ward/zarr_extraction/SAVE/")
 
-h_url <- assets_url(t)
-
-
-
-
-
-
-
-
-
-
-
-
+h_url <- assets_url(t, "Zarr")
+make_vsicurl_url <- function(base_url) {
+  paste0(
+    "/vsicurl", 
+    "?pc_url_signing=yes",
+    "&pc_collection=usgs-lcmap-conus-v13",
+    "&url=",
+    base_url
+  )
+}
+lcpri_url <- make_vsicurl_url(h_url)
 
 
 
+stac_source |>
+  stac_search(datetime = "2000-01-01/2020-12-31") |> 
+  ext_filter(collection == "dfff7b6b-c6dd-5178-bc30-986c057325d0") |>
+  post_request()
 
+
+stac_source |>
+  stac_search() |>
+  get_request()
+
+stac_source |>
+  stac_search(collections = "emodnet-eunis_seabed_habitat_class_2019") |>
+  get_request() |>
+  items_fields(field = "properties")
+a <-  stac_source |>
+  stac_search(collections = "emodnet-eunis_seabed_habitat_class_2019") |>
+  get_request()
+a <-  stac_source |>
+  stac_search(collections = "emodnet-eunis_seabed_habitat_class_2019") |>
+  get_request() |>
+  items_filter(str_detect(properties$productIdentifier, "habitat"))
+
+stac_source |>
+  collections("emodnet-eunis_seabed_habitat_class_2019") |>
+  queryables() |>
+  get_request()
+
+
+map(a$features, \(x) x$properties$productIdentifier)
+
+# --> only queries the first 500 collections
+
+
+
+
+stac_source |>
+  stac_search(limit = ) |>
+  get_request() 
+
+a
+
+s_obj <- stac("https://brazildatacube.dpi.inpe.br/stac/")
+b <- s_obj |>
+  stac_search(
+    collections = "CB4_64_16D_STK-1",
+    datetime = "2019-01-01/2019-12-31",
+    limit = 100) |> 
+  post_request()
+
+b <- s_obj |> 
+  stac_search(collections = c("CB4_64_16D_STK", "S2-16D-2")) |>
+  get_request()
+
+s_obj |>
+  stac_search(
+    collections = "CB4_64_16D_STK-1",
+    datetime = "2019-01-01/2019-12-31",
+    limit = 100) |> 
+  post_request() |>
+  items_fields(field = "properties")
+s_obj |>
+  stac_search(
+    collections = c("CB4_64_16D_STK", "S2-16D-2")) |> 
+  get_request() |>
+  items_filter(properties$`eo:cloud_cover` < 10)
+
+
+# |>
+ #  items_filter(properties$`eo:cloud_cover` < 10)
 
