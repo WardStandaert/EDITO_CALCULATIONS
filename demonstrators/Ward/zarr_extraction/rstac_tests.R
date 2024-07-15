@@ -1,6 +1,61 @@
 library(rstac)
 library(purrr)
 source("demonstrators/Ward/zarr_extraction/editoTools.R")
+
+#1. Query collections ----
+# Define STAC endpoint URL
+stac_endpoint_url <- 'https://catalog.dive.edito.eu/'
+
+# Perform a request to get all collections in the catalog
+collections <- stac(stac_endpoint_url) %>%
+  collections() %>%
+  get_request()
+
+# Print collections
+print(collections)
+
+f <- function(col, name) {
+  collection_list <- col$collections
+  matches <- keep(collection_list, \(col) {grepl(name, col$id, ignore.case = TRUE) |  grepl(name, col$title, ignore.case = TRUE)})
+  return(matches)
+}
+
+
+f_timechunked <- function(col, name) {
+  collection_list <- col$collections
+  matches <- keep(collection_list, \(col) {grepl(name, col$id, ignore.case = TRUE) |  grepl(name, col$title, ignore.case = TRUE)})
+  return(matches)
+}
+
+# alternative
+# eunis <- collects$collections %>%
+#   keep(~ str_detect(tolower(.x$title), "eunis")) %>%
+#   .[[1]]
+
+# Filtered collections in id & title
+t <- f(collections, "broad")[[1]]
+
+
+col_seabed_habitat <- f(collections, "broad")[[1]]
+col_seabed_habitat
+
+#2. Create link and extract raster ----
+link <- rstac::assets_url(col_seabed_habitat, "Zarr")
+#look at what data sets are in there
+names(gdalinfo(link)$arrays)
+
+#still uses EditoTools
+dsn <- toGDAL(link)
+sdsn=sprintf('%s:/%s',dsn,"marine_strategy_framework_directive_benthic_broad_habitat_type")
+sdsn
+r <- rast(sdsn)
+crs(r) <- "epsg:4326"
+plot(r)
+plot(flip(r))
+
+
+
+
 # staging endpoint ----
 stac_endpoint_url <- 'https://catalog.staging.edito.eu'
 
